@@ -6,7 +6,7 @@ import type { BlockScene } from "@/lib/scene/types";
 import { TODAY_PLAN } from "@/lib/scene/types";
 import { loadFixture } from "@/lib/scene/load";
 import { woonerfEligibility } from "@/lib/scene/eligibility";
-import { getCachedScene } from "@/lib/cache";
+import { loadSceneById } from "@/lib/data/resolveById";
 import { gate } from "@/lib/transforms/gate";
 import { applyPlan } from "@/lib/transforms/apply";
 import { computeMetrics } from "@/lib/metrics/compute";
@@ -20,6 +20,9 @@ import { Vitals } from "@/components/Vitals";
 /** The stage crops building context to a street band — the fade was already
     apologizing for the deep parcels; now they're simply out of frame. */
 const CONTEXT_HALF_DEPTH_M = 35;
+
+// Cache-miss resolution refetches 13 city layers (up to ~11 s cold).
+export const maxDuration = 60;
 
 export default async function BlockPage({
   params,
@@ -35,7 +38,11 @@ export default async function BlockPage({
   try {
     scene = loadFixture(name);
   } catch {
-    scene = await getCachedScene(decodeURIComponent(name));
+    try {
+      scene = await loadSceneById(decodeURIComponent(name));
+    } catch {
+      scene = null;
+    }
   }
   if (!scene) notFound();
 
