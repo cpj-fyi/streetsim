@@ -2,5 +2,5 @@ design/loops
 design/ref
 fixtures/raw
 .playwright-mcp
-*.png
+/*.png
 TODO.md
