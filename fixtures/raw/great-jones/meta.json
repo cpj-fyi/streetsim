@@ -1,0 +1,103 @@
+{
+  "locator": {
+    "street": "GREAT JONES ST",
+    "fromStreet": "BROADWAY",
+    "toStreet": "LAFAYETTE ST",
+    "borough": "Manhattan"
+  },
+  "located": {
+    "locator": {
+      "street": "GREAT JONES ST",
+      "fromStreet": "BROADWAY",
+      "toStreet": "LAFAYETTE ST",
+      "borough": "Manhattan"
+    },
+    "chain": [
+      {
+        "physicalid": "92189",
+        "the_geom": {
+          "type": "MultiLineString",
+          "coordinates": [
+            [
+              [
+                -73.994752227749,
+                40.727827018998
+              ],
+              [
+                -73.994191336372,
+                40.727571986014
+              ]
+            ]
+          ]
+        },
+        "stname_label": "GREAT JONES ST",
+        "trafdir": "TF",
+        "streetwidth": "40",
+        "segmentlength": "181.1109856",
+        "posted_speed": "25",
+        "boroughcode": "1",
+        "rw_type": "1",
+        "status": "2",
+        "bike_lane": "2",
+        "number_travel_lanes": "2",
+        "number_park_lanes": "2",
+        "post_type": "ST"
+      },
+      {
+        "physicalid": "92190",
+        "the_geom": {
+          "type": "MultiLineString",
+          "coordinates": [
+            [
+              [
+                -73.994191336372,
+                40.727571986014
+              ],
+              [
+                -73.993640347194,
+                40.727297454418
+              ]
+            ]
+          ]
+        },
+        "stname_label": "GREAT JONES ST",
+        "trafdir": "TF",
+        "streetwidth": "40",
+        "segmentlength": "182.55463219",
+        "posted_speed": "25",
+        "boroughcode": "1",
+        "rw_type": "1",
+        "status": "2",
+        "bike_lane": "2",
+        "number_travel_lanes": "2",
+        "number_park_lanes": "2",
+        "post_type": "ST"
+      }
+    ],
+    "line": [
+      [
+        -73.994752227749,
+        40.727827018998
+      ],
+      [
+        -73.994191336372,
+        40.727571986014
+      ],
+      [
+        -73.993640347194,
+        40.727297454418
+      ]
+    ],
+    "nodeFrom": [
+      -73.994752227749,
+      40.727827018998
+    ],
+    "nodeTo": [
+      -73.993640347194,
+      40.727297454418
+    ],
+    "lengthM": 110.80836837432783
+  },
+  "treeSource": "forestry",
+  "fetchedAt": "2026-08-11T10:50:42.027Z"
+}

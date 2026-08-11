@@ -1,0 +1,69 @@
+{
+  "locator": {
+    "street": "UNDERHILL AVE",
+    "fromStreet": "STERLING PL",
+    "toStreet": "ST JOHNS PL",
+    "borough": "Brooklyn"
+  },
+  "located": {
+    "locator": {
+      "street": "UNDERHILL AVE",
+      "fromStreet": "STERLING PL",
+      "toStreet": "ST JOHNS PL",
+      "borough": "Brooklyn"
+    },
+    "chain": [
+      {
+        "physicalid": "39218",
+        "the_geom": {
+          "type": "MultiLineString",
+          "coordinates": [
+            [
+              [
+                -73.966613834359,
+                40.675310044395
+              ],
+              [
+                -73.966937136321,
+                40.674441644093
+              ]
+            ]
+          ]
+        },
+        "stname_label": "UNDERHILL AVE",
+        "trafdir": "TW",
+        "streetwidth": "32",
+        "segmentlength": "335.33235087",
+        "posted_speed": "20",
+        "boroughcode": "3",
+        "rw_type": "1",
+        "status": "2",
+        "bike_lane": "3",
+        "number_travel_lanes": "2",
+        "number_park_lanes": "2",
+        "post_type": "AVE"
+      }
+    ],
+    "line": [
+      [
+        -73.966613834359,
+        40.675310044395
+      ],
+      [
+        -73.966937136321,
+        40.674441644093
+      ]
+    ],
+    "nodeFrom": [
+      -73.966613834359,
+      40.675310044395
+    ],
+    "nodeTo": [
+      -73.966937136321,
+      40.674441644093
+    ],
+    "lengthM": 100.44946336890206
+  },
+  "treeSource": "forestry",
+  "fetchedAt": "2026-08-11T10:50:42.841Z"
+}

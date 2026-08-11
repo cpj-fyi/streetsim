@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# streetSim
 
-## Getting Started
+Render any NYC block from real city data, redesign it as a shared street,
+and see both versions with honest, cited metrics.
 
-First, run the development server:
+Live at [streets.cpj.fyi](https://streets.cpj.fyi).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+**Launch scope: New York City only.** The constraint buys accuracy — real
+surveyed polygons (Planimetrics), real speed limits (DOT), real crash history
+(NYPD), real assessed values (PLUTO). No synthetic geometry in production.
+
+## Architecture
+
+Three strictly separated layers (see `lib/scene/types.ts`):
+
+```
+parse    raw city data       →  BlockScene       lib/data, lib/scene
+apply    (BlockScene, plan)  →  BlockScene       lib/transforms   (pure)
+render   BlockScene          →  SVG              lib/render       (pure)
+metrics  (before, after)     →  Metrics          lib/metrics      (pure)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Rendering is bespoke SVG — no map library, no tiles. We project raw polygons
+into a local meter frame and draw a plate. The visual law lives in
+`design/tokens.json`; beauty is verified through the protocol in
+`design/BEAUTY_LOG.md` against the Apple Maps reference plates in `design/ref/`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Every metric constant is sourced in `model.md` with its published range.
+Tradeoffs stay visible: cobbles cost accessibility, calming adds emergency
+seconds, removing parking alone raises design speed. The tool is credible
+because it concedes.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Running
 
-## Learn More
+```bash
+npm install
+npm run fixtures      # fetch + cache the three canonical blocks from NYC open data
+npm run dev           # http://localhost:3000
+npm test              # gate matrix + transform invariants + metrics honesty
+npm run debug-render  # raw wireframe SVGs proving polygon correctness → debug/
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Cache
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`lib/cache.ts` uses Supabase (Postgres + PostGIS) when `SUPABASE_URL` and
+`SUPABASE_ANON_KEY` are set (schema: `supabase/schema.sql`); otherwise it falls
+back to a local file cache in `.cache/`. Fixture blocks ship in `fixtures/` and
+work with no network at all.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Data sources (all per-block, cached)
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+NYC Planimetrics (roadbed, sidewalk, curb) · CSCL centerline · Building
+footprints · MapPLUTO · DOT speed limits · LCGMS schools · Forestry tree
+points (2015 census fallback) · DOT parking regulations · DOT speed humps ·
+DOT bike routes · NYPD Motor Vehicle Collisions. Registry with field mappings:
+`lib/data/sources.ts`.

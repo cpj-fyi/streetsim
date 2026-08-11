@@ -1,26 +1,72 @@
 @import "tailwindcss";
 
+/* Monocle-informed, cpj-adjacent chrome: warm paper, ink rules, square
+   corners, clear 1px borders. No accent colors — semantic red/green survive
+   only as data encoding in the vitals (the spec's "allowed to go red").
+   Freight (serif) where there's room; SF Pro for working surfaces. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f7f6f2;
+  --panel: #fcfbf8;
+  --ink: #1a1a1a;
+  --ink-soft: #63615b;
+  --ink-faint: #98958d;
+  --rule: #1a1a1a;
+  --hairline: #ddd9d0;
+  --accent-danger: #a03a30;
+  --accent-ok: #47664b;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-hairline: var(--hairline);
+  --color-danger: var(--accent-danger);
+  --color-ok: var(--accent-ok);
+  --font-serif: "freight-text-pro", "Iowan Old Style", "Charter", "Hoefler Text", Georgia, serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
+  font-feature-settings: "tnum";
+}
+
+/* Eyebrow: the small-caps instrument label. The eyebrow IS the heading. */
+.eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Editorial serif — Freight where it has space. */
+.serif {
+  font-family: var(--font-serif);
+}
+
+.plate svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The map stage: the plate fits the available box, never scrolls. */
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Fill the box and let viewBox + preserveAspectRatio (xMidYMid meet) do the
+   letterboxing — the only SVG fitting behavior that is identical across
+   WebKit and Blink. Auto-sizing tricks collapse in Safari. */
+.stage svg {
+  width: 100%;
+  height: 100%;
 }

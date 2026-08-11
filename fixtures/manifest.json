@@ -1,0 +1,17 @@
+[
+  {
+    "name": "great-jones",
+    "label": "Great Jones St (Broadway → Lafayette St), Manhattan",
+    "kind": "wide-oneway"
+  },
+  {
+    "name": "underhill",
+    "label": "Underhill Ave (Sterling Pl → St Johns Pl), Brooklyn",
+    "kind": "narrow-twoway"
+  },
+  {
+    "name": "hicks",
+    "label": "Hicks St (Middagh St → Cranberry St), Brooklyn",
+    "kind": "school"
+  }
+]

@@ -1,0 +1,68 @@
+{
+  "locator": {
+    "street": "HICKS ST",
+    "fromStreet": "MIDDAGH ST",
+    "toStreet": "CRANBERRY ST",
+    "borough": "Brooklyn"
+  },
+  "located": {
+    "locator": {
+      "street": "HICKS ST",
+      "fromStreet": "MIDDAGH ST",
+      "toStreet": "CRANBERRY ST",
+      "borough": "Brooklyn"
+    },
+    "chain": [
+      {
+        "physicalid": "42798",
+        "the_geom": {
+          "type": "MultiLineString",
+          "coordinates": [
+            [
+              [
+                -73.993361744698,
+                40.700494154921
+              ],
+              [
+                -73.993679148398,
+                40.699852610511
+              ]
+            ]
+          ]
+        },
+        "stname_label": "HICKS ST",
+        "trafdir": "TF",
+        "streetwidth": "24",
+        "segmentlength": "252.28978817",
+        "posted_speed": "20",
+        "boroughcode": "3",
+        "rw_type": "1",
+        "status": "2",
+        "number_travel_lanes": "1",
+        "number_park_lanes": "1",
+        "post_type": "ST"
+      }
+    ],
+    "line": [
+      [
+        -73.993361744698,
+        40.700494154921
+      ],
+      [
+        -73.993679148398,
+        40.699852610511
+      ]
+    ],
+    "nodeFrom": [
+      -73.993361744698,
+      40.700494154921
+    ],
+    "nodeTo": [
+      -73.993679148398,
+      40.699852610511
+    ],
+    "lengthM": 76.27484482424879
+  },
+  "treeSource": "forestry",
+  "fetchedAt": "2026-08-11T10:50:44.156Z"
+}
