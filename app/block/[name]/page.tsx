@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { cache } from "react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { BlockScene } from "@/lib/scene/types";
@@ -24,6 +26,37 @@ const CONTEXT_HALF_DEPTH_M = 35;
 // Cache-miss resolution refetches 13 city layers (up to ~11 s cold).
 export const maxDuration = 60;
 
+/** One scene resolution per request, shared by generateMetadata and the page. */
+const getScene = cache(async (name: string): Promise<BlockScene | null> => {
+  try {
+    return loadFixture(name);
+  } catch {
+    try {
+      return await loadSceneById(decodeURIComponent(name));
+    } catch {
+      return null;
+    }
+  }
+});
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ name: string }>;
+}): Promise<Metadata> {
+  const { name } = await params;
+  const scene = await getScene(name);
+  if (!scene) return { title: "Block not found" };
+  const seg = scene.segment;
+  const street = titleCase(seg.street);
+  const description = `${street}, ${titleCase(seg.fromStreet)} to ${titleCase(seg.toStreet)}, ${seg.borough}. Redesign this block as a shared street and see honest, cited before and after numbers.`;
+  return {
+    title: street,
+    description,
+    openGraph: { title: `${street} · streetSim`, description },
+  };
+}
+
 export default async function BlockPage({
   params,
   searchParams,
@@ -34,16 +67,7 @@ export default async function BlockPage({
   const { name } = await params;
   const sp = await searchParams;
 
-  let scene: BlockScene | null = null;
-  try {
-    scene = loadFixture(name);
-  } catch {
-    try {
-      scene = await loadSceneById(decodeURIComponent(name));
-    } catch {
-      scene = null;
-    }
-  }
+  const scene = await getScene(name);
   if (!scene) notFound();
 
   const eligibility = woonerfEligibility(scene);
