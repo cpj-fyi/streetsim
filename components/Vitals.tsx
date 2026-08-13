@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Metrics } from "@/lib/metrics/compute";
+import { NotesButton } from "@/components/NotesButton";
 
 /**
  * Honest numbers, set like a print data page: serif hero numerals, ink rules,
@@ -20,7 +21,7 @@ export function Vitals({
   const m = metrics;
   const [showNotes, setShowNotes] = useState(false);
   return (
-    <div>
+    <div className="vitals min-w-0">
       {/* Stacked stat tiles — this component now lives in a data column. */}
       <div className="grid gap-4">
         <Headline
@@ -46,17 +47,14 @@ export function Vitals({
       </div>
 
       <div className="mt-6 border border-rule bg-panel">
-        <div className="flex items-baseline justify-between border-b border-hairline px-4 py-2.5">
-          <span className="eyebrow">Block vitals · Before → After</span>
-          <button
-            onClick={() => setShowNotes((v) => !v)}
-            className="eyebrow cursor-pointer text-ink-faint transition-colors hover:text-ink"
-            aria-pressed={showNotes}
-          >
-            {showNotes ? "Hide notes" : "Show notes"}
-          </button>
+        <div className="flex min-h-12 items-center justify-between gap-3 border-b border-hairline bg-paper px-3 py-2">
+          <h2 className="eyebrow">Block vitals · Before → After</h2>
+          <NotesButton pressed={showNotes} onPressedChange={setShowNotes} />
         </div>
         <table className="w-full text-[13px]">
+          <caption className="sr-only">
+            Block vitals before and after the selected changes
+          </caption>
           <tbody>
             <Row
               label="Design speed"
@@ -224,6 +222,9 @@ function Row({
           }`}
         >
           {after}
+          {changed && (
+            <span className="sr-only">, {good ? "improvement" : "tradeoff"}</span>
+          )}
         </td>
       </tr>
       <CaptionRow caption={caption} />
@@ -262,6 +263,9 @@ function DeltaRow({
           {sign}
           {decimals > 0 ? fmt1(delta) : fmtNum(delta)}
           {unit}
+          {delta !== 0 && (
+            <span className="sr-only">, {good ? "improvement" : "tradeoff"}</span>
+          )}
         </td>
       </tr>
       <CaptionRow caption={caption} />

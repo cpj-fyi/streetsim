@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Link from "next/link";
 import { AddressSearch } from "@/components/AddressSearch";
+import { examplePlanForKind, paramsFromPlan } from "@/lib/plan";
 
 interface ManifestEntry {
   name: string;
@@ -24,12 +25,18 @@ const KIND_NOTES: Record<string, string> = {
   school: "A school block. Children cross here every morning.",
 };
 
+const KIND_EDITS: Record<string, string> = {
+  "wide-oneway": "Heavy chicane, trees, paved plaza",
+  "narrow-twoway": "Reduced parking, gateways, paved plaza",
+  school: "Chicane, gateways, paved plaza",
+};
+
 export default function Home() {
   const fixtures = readManifest();
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
       <header className="border-b border-rule pb-6">
-        <div className="eyebrow">streetSim · New York City</div>
+        <h1 className="eyebrow">streetSim · New York City</h1>
         <p className="serif mt-5 max-w-xl text-[22px] leading-8">
           Any New York City block, drawn from the city&rsquo;s own survey data.
           Redesign it as a shared street and see what changes, with cited
@@ -38,7 +45,7 @@ export default function Home() {
       </header>
 
       <div className="mt-10">
-        <AddressSearch />
+        <AddressSearch label="Find a block" />
       </div>
 
       <div className="mt-14">
@@ -49,18 +56,27 @@ export default function Home() {
               No cached blocks yet. Run <code>npm run fixtures</code>.
             </p>
           )}
-          {fixtures.map((f) => (
-            <Link
-              key={f.name}
-              href={`/block/${f.name}`}
-              className="border border-rule bg-panel p-4 transition-colors hover:bg-paper"
-            >
-              <div className="text-[13px] font-semibold">{f.label}</div>
-              <div className="serif mt-2 text-[14px] italic leading-5 text-ink-soft">
-                {KIND_NOTES[f.kind] ?? ""}
-              </div>
-            </Link>
-          ))}
+          {fixtures.map((f) => {
+            const query = paramsFromPlan(examplePlanForKind(f.kind)).toString();
+            return (
+              <Link
+                key={f.name}
+                href={`/block/${f.name}?${query}`}
+                className="group flex min-h-44 flex-col border border-rule bg-panel p-5 transition-colors hover:bg-paper"
+              >
+                <div className="text-[14px] font-semibold leading-[1.4] text-pretty">{f.label}</div>
+                <div className="serif mt-2 text-[14px] italic leading-[1.45] text-ink-soft text-pretty">
+                  {KIND_NOTES[f.kind] ?? ""}
+                </div>
+                <div className="mt-auto border-t border-hairline pt-3">
+                  <div className="eyebrow text-ink-faint">Edited example</div>
+                  <div className="mt-1.5 text-[12px] leading-[1.4] text-ink-soft">
+                    {KIND_EDITS[f.kind] ?? KIND_EDITS.school}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
 

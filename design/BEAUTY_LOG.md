@@ -240,3 +240,152 @@ repaired. Suite 126 green.
 Learned: every "impossible" geometry assumption in parse needs either a
 construction that makes it true or a loud failure — silent half-scenes are
 the only unforgivable output.
+
+## Interface contrast loop 1 — 2026-08-12 (interface-contrast-02/)
+
+User direction: the plates can carry a little more contrast. The change stays
+inside design/tokens.json: building masses and their surveyed edges separate
+more clearly from paper; curbs, parking, vegetation, reclaimed surfaces, and
+labels each moved one restrained step darker. Roadbed remains the light ribbon,
+so the established hierarchy does not invert.
+
+Scores: hierarchy 4.5 · edge 4.5 · density 4 · typography 4.5 · color 4.5 ·
+restraint 4.5. All three fixture pairs pass. Street, cross-street, and school
+labels now clear a 4.5:1 WCAG text-contrast floor against the road surface.
+Parity remains clean on every pair.
+
+Learned: contrast was missing at the boundaries, not in the palette concept.
+Darkening the same warm neutral and green families preserves the survey-sheet
+calm while making curb movement and building fabric legible at stage scale.
+
+## Interface contrast loop 2 — 2026-08-12 (interface-contrast-03/)
+
+Fresh-eyes review of all six plates, with deterministic byte comparison against
+loop 1. Scores hold: hierarchy 4.5 · edge 4.5 · density 4 · typography 4.5 ·
+color 4.5 · restraint 4.5. The output is byte-identical and parity stays clean.
+Second consecutive pass reached.
+
+## Interface contrast Chanel test — 2026-08-12
+
+Removal tested: the low-opacity building shadow. Rejected. The darker footprint
+stroke keeps individual masses distinct, but without the shadow the deeper
+context flattens into the parcel field, especially on Underhill. The shadow is
+quiet elevation, not duplicate decoration, so it remains.
+
+## Control and street-detail loop 1 — 2026-08-12 (control-refinement-07/)
+
+User direction joined the interface and plate into one system. The stage now
+uses a current-location search field and plate-native speed and one-way signs.
+Cars gained cabins, glazing, painted bays, and deterministic vacancies. Pavers
+use long staggered courses while cobbles use compact rounded units. Existing
+and new cycle tracks keep a beige edge inside pedestrian space. New trees vary
+in crown and spacing and avoid tracks, cars, and existing canopies.
+
+The shared-plaza treatment now has a physical operating idea: gateways announce
+controlled entry, seating islands and boulders interrupt the straight path, and
+a chicane preserves slow delivery and emergency access. A shared surface cannot
+apply without both gateways and a chicane.
+
+Scores: hierarchy 4.5 · edge 4.5 · density 4 · typography 4.5 · color 4.5 ·
+restraint 4. All three fixture pairs pass and renderer parity is clean.
+
+Learned: material changes need different grammars, not adjacent beige colors.
+The paver and cobble patterns became legible only after their unit shape and
+course rhythm diverged. The same applies to a plaza: paving alone communicates
+priority but not controlled vehicle movement, so visible deflection must carry
+that part of the story.
+
+## Control and street-detail loop 2 — 2026-08-12 (control-refinement-08/)
+
+Fresh-eyes comparison across all six plates. Scores hold: hierarchy 4.5 · edge
+4.5 · density 4 · typography 4.5 · color 4.5 · restraint 4. The second render
+is byte-identical to loop 1 and all allowed intervention layers pass parity.
+
+## Control and street-detail Chanel test — 2026-08-12
+
+Removal tested: paired boulders beside the plaza benches. Rejected. At full
+stage scale the benches alone read as incidental furniture and the former
+straight-through line becomes visually permissive. The boulders make each
+seating island a protected public room and explain why motor access bends.
+They remain.
+
+## Bike facility and layer-order loop 1 — 2026-08-13 (2026-08-13-bike-layering/)
+
+User direction: boulders and chicanes need stronger contrast; parking fill must
+sit below the curb boundary; loading text cannot disappear under canopies; and
+existing bike facilities must occupy the side and roadbed position recorded by
+DOT. Great Jones now reads FT/TF plus BIKEDIR instead of defaulting to the left.
+Conventional lanes sit traffic-side of parking. Protected lanes sit curbside
+and move parked cars inward. Bicycle glyphs and lane dividers carry only facts
+present in the scene graph.
+
+The first contact sheet exposed two faults. Seating chicanes still used the
+quiet generic curb stroke, and a single inferred lane-divider path followed an
+abnormal split curb into Cumberland's plaza geometry. Seating now shares the
+strong chicane edge. Lane lines break when the surveyed width flares outside
+the block's normal range.
+
+Learned: z-order is part of the street model. A parking-band fill above the
+curb reads as sidewalk occupation, while a loading label below a canopy reads
+as missing information. Surface, boundary, object, canopy, and annotation need
+separate layers even when they describe one curb bay.
+
+## Bike facility and layer-order loop 2 — 2026-08-13 (2026-08-13-bike-layering-2/)
+
+Fresh-eyes review of all six plates. The stronger seating outline makes the
+deflection legible, but the edge and bike symbols still depended on low-contrast
+green-on-green pairs at stage scale. The edge colors were darkened to clear a
+3:1 non-text contrast target against their fills.
+
+## Bike facility and layer-order loop 3 — 2026-08-13 (2026-08-13-bike-layering-3/)
+
+Scores: hierarchy 4.5 · edge 4.5 · density 4 · typography 4.5 · color 4.5 ·
+restraint 4.5. Great Jones clearly separates curb parking, the conventional
+bike lane, and travel lanes. Shared-surface seating islands retain calm fills
+with decisive edges and dark boulders. All fixture pairs pass parity.
+
+## Bike facility and layer-order loop 4 — 2026-08-13 (2026-08-13-bike-layering-4/)
+
+Second consecutive pass. All six SVGs are byte-identical to loop 3 and every
+allowed intervention layer passes parity.
+
+## Bike facility and layer-order Chanel test — 2026-08-13
+
+Removal tested: the bicycle pavement glyphs. Rejected. A green strip by itself
+can read as planting or generic public space, especially on the shared palette.
+The sparse glyphs distinguish an existing facility without turning the plate
+into a traffic-engineering diagram. They remain.
+
+## Chicane clearance loop — 2026-08-13 (2026-08-13-chicane-clearance/)
+
+Dean St exposed an operating fault rather than a palette fault: a build-out
+cleared parked cars on its own curb but counted cars opposite the pinch as
+usable carriageway. Every chicane footprint now clears retained parking on
+both curbs. The bend remains compact, but its lane is physically continuous.
+
+Scores: hierarchy 4.5 · edge 4.5 · density 4 · typography 4.5 · color 4.5 ·
+restraint 4.5. Fixture parity passes. The exact Dean plan was checked at stage
+scale with reduced left parking, removed right parking, and a medium chicane.
+
+Learned: clear width is an occupied-space question. Surveyed roadbed width
+cannot stand in for drivable width when a parked vehicle remains beside a
+pinch point.
+
+## Compact workspace loop — 2026-08-13
+
+The desktop flank drawers failed below 1150 px because their closed handles
+shared the same edge and their open states consumed the map. Compact viewports
+now use a horizontally inspectable map, fixed Edit and Outcomes launchers, and
+one full-screen sheet. The sheet preserves the same segmented control, notes
+switch, and panel hierarchy used on desktop without stacking controls over the
+street.
+
+Checks at 320 px and 390 px found no document overflow. The plate remains
+pannable at a useful scale, controls meet 44 px touch targets, and only one
+panel can exist at a time. Chrome and WebKit both retain the current edit,
+restore focus after closing, and keep the background inert while the sheet is
+open.
+
+Learned: compact street editing needs mode separation. The map, the control
+panel, and the measured outcomes are each useful at full width; shrinking all
+three into a desktop composition makes every one of them less usable.

@@ -5,15 +5,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadRawLayers } from '@/lib/data/rawStore';
-import { parseBlockScene } from '@/lib/scene/parse';
+import { parseBlockScene, type ParseWarnings } from '@/lib/scene/parse';
 
 async function main() {
   const root = process.cwd();
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'fixtures', 'manifest.json'), 'utf8')) as Array<{ name: string }>;
   for (const { name } of manifest) {
     const raw = await loadRawLayers(path.join(root, 'fixtures', 'raw', name));
-    const scene = parseBlockScene(raw);
-    fs.writeFileSync(path.join(root, 'fixtures', `${name}.json`), JSON.stringify(scene));
+    const warnings: ParseWarnings = { warnings: [] };
+    const scene = parseBlockScene(raw, warnings);
+    fs.writeFileSync(path.join(root, 'fixtures', `${name}.json`), JSON.stringify(scene, null, 1));
     console.log(`${name}: reparsed — school=${JSON.stringify(scene.school)}`);
   }
 }

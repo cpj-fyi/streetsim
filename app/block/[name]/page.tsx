@@ -1,9 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import type { BlockScene } from "@/lib/scene/types";
 import { TODAY_PLAN } from "@/lib/scene/types";
 import { loadFixture } from "@/lib/scene/load";
@@ -103,6 +100,9 @@ export default async function BlockPage({
 
   const seg = scene.segment;
   const s = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : sp[k]);
+  const street = titleCase(seg.street);
+  const fromTo = `${titleCase(seg.fromStreet)} to ${titleCase(seg.toStreet)}`;
+  const currentLocation = `${street}, ${fromTo}, ${seg.borough}`;
 
   return (
     <BlockStage
@@ -112,61 +112,30 @@ export default async function BlockPage({
       ineligibleReason={eligibility.reason ?? geometryError}
       initialLeftOpen={s("dl") !== "0"}
       initialRightOpen={s("dr") !== "0"}
-      cartouche={{
-        street: titleCase(seg.street),
-        fromTo: `${titleCase(seg.fromStreet)} to ${titleCase(seg.toStreet)}`,
-        borough: seg.borough,
+      identity={{
+        street,
+        fromTo: `${fromTo}, ${seg.borough}`,
         postedMph: scene.postedLimitMph,
         oneWay: scene.oneWay,
-        school: scene.school
-          ? { name: scene.school.name, distanceFt: scene.school.distanceFt }
-          : null,
-        plaza: scene.existingPedestrianized
-          ? { name: scene.existingPedestrianized.name }
-          : null,
       }}
       left={
         <div className="flex flex-col gap-6">
-          <section>
-            <div className="eyebrow mb-3 text-ink-soft">Location</div>
-            <AddressSearch />
-            <FixtureLinks current={name} />
+          <section className="border-b border-hairline pb-6">
+            <AddressSearch
+              key={scene.segment.segmentId}
+              label="Location"
+              initialValue={currentLocation}
+            />
           </section>
           <PlanControls
             plan={requested}
             applied={gates.normalized}
             gates={gates.states}
-            schoolZone={scene.schoolZone}
-            columns={false}
           />
         </div>
       }
-      right={metrics ? <Vitals metrics={metrics} schoolZone={scene.schoolZone} /> : null}
+      right={hasPlan && metrics ? <Vitals metrics={metrics} schoolZone={scene.schoolZone} /> : null}
     />
-  );
-}
-
-function FixtureLinks({ current }: { current: string }) {
-  let fixtures: Array<{ name: string; label: string }> = [];
-  try {
-    fixtures = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), "fixtures", "manifest.json"), "utf8"),
-    ) as Array<{ name: string; label: string }>;
-  } catch {
-    return null;
-  }
-  return (
-    <div className="mt-3 flex flex-col gap-1.5">
-      {fixtures.map((f) => (
-        <Link
-          key={f.name}
-          href={`/block/${f.name}`}
-          className={`text-[13px] ${f.name === current ? "font-semibold text-ink" : "text-ink-soft hover:text-ink"}`}
-        >
-          {f.label}
-        </Link>
-      ))}
-    </div>
   );
 }
 

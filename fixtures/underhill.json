@@ -3310,7 +3310,9 @@
  "existingCalming": [],
  "existingBikeLane": {
   "side": "left",
-  "kind": "shared"
+  "kind": "shared",
+  "buffered": false,
+  "direction": 0
  },
  "existingPedestrianized": null,
  "crashHistory": {
