@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
-/* Monocle-informed, cpj-adjacent chrome: warm paper, ink rules, square
+/* Monocle-informed, cpj-adjacent chrome: neutral paper, ink rules, square
    corners, clear 1px borders. No accent colors — semantic red/green survive
    only as data encoding in the vitals (the spec's "allowed to go red").
    Freight (serif) where there's room; SF Pro for working surfaces. */
 :root {
-  --paper: #f7f6f2;
-  --panel: #fcfbf8;
+  --paper: #f8f8f8;
+  --panel: #ffffff;
   --ink: #1a1a1a;
   --ink-soft: #63615b;
   --ink-faint: #706e68;
