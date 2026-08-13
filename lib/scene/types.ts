@@ -162,7 +162,14 @@ export interface BlockScene {
   buildings: Parcel[];
   existingTrees: TreePoint[];
   existingCalming: CalmingFeature[];
-  existingBikeLane: { side: Side; kind: 'standard' | 'protected' | 'shared' } | null;
+  existingBikeLane: {
+    side: Side;
+    kind: 'standard' | 'protected' | 'shared';
+    /** True for buffered conventional lanes and every physically protected lane. */
+    buffered?: boolean;
+    /** Bicycle travel direction in the local frame. 0 means two-way or unknown. */
+    direction?: 1 | -1 | 0;
+  } | null;
   /**
    * ADDITIVE (data pipeline, optional): set when a DOT pedestrian plaza
    * polygon intersects (or lies within ~10 m of) this block's roadbed —
@@ -180,7 +187,10 @@ export interface BlockScene {
   /** New trees added by the streetTrees intervention (never mixed into existingTrees). */
   addedTrees: XY[];
   /** Reclaimed-space polygons (freed parking lane, gateway build-outs, etc.). */
-  reclaimed: Array<{ poly: Poly; use: 'planting' | 'seating' | 'parklet' | 'gateway' | 'island' | 'open' }>;
+  reclaimed: Array<{
+    poly: Poly;
+    use: 'planting' | 'chicane' | 'seating' | 'parklet' | 'gateway' | 'island' | 'open';
+  }>;
   /** Roadbed after geometric interventions (jog/gateways/islands); null = unchanged. */
   roadbedAfter: Poly | null;
   /** Median/mid-block islands. */
@@ -245,6 +255,7 @@ export type ControlId =
   | 'parking.right'
   | 'gateways'
   | 'jog'
+  | 'jog.heavy'
   | 'medianIslands'
   | 'streetTrees'
   | 'parklet'

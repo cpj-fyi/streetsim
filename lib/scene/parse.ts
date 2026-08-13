@@ -600,18 +600,48 @@ export function parseBlockScene(raw: RawBlockLayers, out?: ParseWarnings): Block
     );
     if (pts.length < 2) continue;
     const fac = `${b.ft_facilit ?? ''} ${b.tf_facilit ?? ''}`.toUpperCase();
-    const kind: NonNullable<BlockScene['existingBikeLane']>['kind'] = fac.includes('PROTECTED')
+    const kind: NonNullable<BlockScene['existingBikeLane']>['kind'] =
+      fac.includes('PROTECTED') || b.facilitycl === 'I'
       ? 'protected'
       : fac.includes('SHARROW') || fac.includes('SHARED') || b.facilitycl === 'III'
         ? 'shared'
         : 'standard';
-    if (existingBikeLane && bikeRank[existingBikeLane.kind] >= bikeRank[kind]) continue;
-    // Side from geometric offset when derivable; bike route centerlines are
-    // usually digitized on the CSCL itself, in which case default 'left'.
+    const buffered = kind === 'protected' || fac.includes('BUFFER');
+    if (
+      existingBikeLane &&
+      (bikeRank[existingBikeLane.kind] > bikeRank[kind] ||
+        (bikeRank[existingBikeLane.kind] === bikeRank[kind] &&
+          (Boolean(existingBikeLane.buffered) || !buffered)))
+    ) {
+      continue;
+    }
+    // Side from geometric offset when derivable. Route geometry is usually
+    // digitized on the CSCL centerline, so use DOT's FT/TF travel direction
+    // plus BIKEDIR (L/R relative to bicycle travel) when there is no offset.
     const meanY =
       pts.reduce((s, p) => s + (p[1] - yAtX(centerline, p[0])), 0) / pts.length;
-    const side: Side = Math.abs(meanY) > 2 ? (meanY > 0 ? 'left' : 'right') : 'left';
-    existingBikeLane = { side, kind };
+    const geometryDirection: 1 | -1 = local[local.length - 1][0] >= local[0][0] ? 1 : -1;
+    const hasFt = Boolean(b.ft_facilit?.trim());
+    const hasTf = Boolean(b.tf_facilit?.trim());
+    const direction: 1 | -1 | 0 =
+      hasFt && !hasTf ? geometryDirection : hasTf && !hasFt ? (geometryDirection * -1) as 1 | -1 : 0;
+    let side: Side;
+    if (Math.abs(meanY) > 2) {
+      side = meanY > 0 ? 'left' : 'right';
+    } else if (direction !== 0 && (b.bikedir === 'L' || b.bikedir === 'R')) {
+      const travelRight: Side = direction === 1 ? 'right' : 'left';
+      side = b.bikedir === 'R' ? travelRight : travelRight === 'right' ? 'left' : 'right';
+    } else if (direction !== 0) {
+      side = direction === 1 ? 'right' : 'left';
+    } else {
+      side = 'left';
+    }
+    existingBikeLane = {
+      side,
+      kind,
+      buffered,
+      direction,
+    };
   }
 
   /* ---- 12. Crash history. ---- */

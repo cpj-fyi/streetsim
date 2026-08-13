@@ -4,13 +4,10 @@
  * span chooser, and loading-bay placement.
  *
  * gate() and applyPlan() must see the SAME geometry for the same plan, or the
- * gate would promise what apply cannot build. Two documented exceptions, both
+ * gate would promise what apply cannot build. One documented exception is
  * resolved by apply degrading (the medianIslands precedent — gate cannot see
  * width, apply drops):
- * 1. reduceLayout's tree-grid alignment nudges clusters by up to half a grid
- *    step when streetTrees is on. gate evaluates the canonical (unaligned)
- *    layout; the nudge never changes cluster count or depth, only position.
- * 2. Loading-bay legality in gate() ignores chicane build-out and borrowed
+ * 1. Loading-bay legality in gate() ignores chicane build-out and borrowed
  *    strip spans (jog placement is not computable without running most of
  *    apply). apply re-checks with the full conflict set and degrades to no
  *    bay when the fuller set leaves no room.
@@ -113,8 +110,8 @@ export interface ReduceLayout {
  * clusters of 5.5 m bays, each cluster at least 2 bays, everything at least
  * 6.1 m clear of the corners (daylighting). Clusters center on their extent
  * and snap flush to a region edge rather than leave a freed sliver under 3 m.
- * `treeGridM` (apply passes 8 when streetTrees is on) nudges each cluster
- * start onto the tree-pit grid so bays sit between pits; gate passes null.
+ * `treeGridM` is retained for URL-era geometry compatibility. Current tree
+ * placement is irregular and already stays inside the freed extents.
  */
 export function reduceLayout(scene: BlockScene, side: Side, treeGridM: number | null): ReduceLayout {
   const extents = sideExtents(scene, side);

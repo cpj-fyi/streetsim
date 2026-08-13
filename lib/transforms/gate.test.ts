@@ -21,6 +21,7 @@ const ALL_CONTROLS: ControlId[] = [
   'parking.right',
   'gateways',
   'jog',
+  'jog.heavy',
   'medianIslands',
   'streetTrees',
   'parklet',
@@ -42,7 +43,7 @@ describe('gate: coverage and hygiene', () => {
     mkPlan(),
     mkPlan({ parking: { left: 'remove', right: 'remove' }, streetTrees: true }),
     mkPlan({ parking: { left: 'reduce' }, jog: 'heavy', medianIslands: true, sharedSurface: true }),
-    mkPlan({ gateways: true, sharedSurface: true, bikeLane: 'right', loadingZone: true }),
+    mkPlan({ gateways: true, jog: 'light', sharedSurface: true, bikeLane: 'right', loadingZone: true }),
   ];
 
   it('emits exactly one state for every ControlId on every call', () => {
@@ -121,22 +122,22 @@ describe('rule 1: streetTrees requires a freed curb on at least one side', () =>
 });
 
 describe('rule 7: no new trees on an already-canopied block', () => {
-  it('triggers on tree density ≥ 12 per 100 m, even with parking removed', () => {
+  it('triggers on tree density at or above 24 per 100 m, even with parking removed', () => {
     const r = gate(denseCanopyScene(), mkPlan({ parking: { left: 'remove' }, streetTrees: true }));
     const s = stateOf(r, 'streetTrees');
     expect(s.status).toBe('disabled');
-    expect(s.reason).toBe(alreadyShadedReason(16, 120));
+    expect(s.reason).toBe(alreadyShadedReason(30, 120));
     expect(r.normalized.streetTrees).toBe(false);
   });
 
   it('interpolates the real counts into the reason', () => {
     const r = gate(denseCanopyScene(), mkPlan({ parking: { left: 'remove' }, streetTrees: true }));
-    expect(stateOf(r, 'streetTrees').reason).toContain('16 mature trees along 120 meters');
+    expect(stateOf(r, 'streetTrees').reason).toContain('30 mature trees along 120 meters');
   });
 
-  it('triggers on provenance.canopyFraction ≥ 0.40', () => {
+  it('triggers on provenance.canopyFraction at or above 0.65', () => {
     const scene = baseScene(); // only 6 trees (5 per 100 m) — density alone passes
-    scene.provenance = mkProvenance(0.45);
+    scene.provenance = mkProvenance(0.7);
     const r = gate(scene, mkPlan({ parking: { right: 'remove' }, streetTrees: true }));
     const s = stateOf(r, 'streetTrees');
     expect(s.status).toBe('disabled');
@@ -146,13 +147,13 @@ describe('rule 7: no new trees on an already-canopied block', () => {
 
   it('does not trigger just below both thresholds', () => {
     const scene = baseScene();
-    // 8 trees / 120 m = 6.67 per 100 m (< 12); canopy 0.39 (< 0.40).
+    // 8 trees / 120 m = 6.67 per 100 m; canopy 0.64 is also below the limit.
     scene.existingTrees = [
       ...scene.existingTrees,
       { pos: [35, 6.75], dbhIn: 10, species: 'ginkgo', source: 'forestry' },
       { pos: [85, -6.75], dbhIn: 12, species: 'pin oak', source: 'forestry' },
     ];
-    scene.provenance = mkProvenance(0.39);
+    scene.provenance = mkProvenance(0.64);
     const r = gate(scene, mkPlan({ parking: { right: 'remove' }, streetTrees: true }));
     expect(stateOf(r, 'streetTrees').status).toBe('enabled');
     expect(r.normalized.streetTrees).toBe(true);
@@ -170,18 +171,18 @@ describe('rule 7: no new trees on an already-canopied block', () => {
     const r = gate(denseCanopyScene(), mkPlan({ streetTrees: true }));
     const s = stateOf(r, 'streetTrees');
     expect(s.status).toBe('disabled');
-    expect(s.reason).toBe(alreadyShadedReason(16, 120));
+    expect(s.reason).toBe(alreadyShadedReason(30, 120));
     expect(s.reason).not.toBe(REASONS.treesNeedParking);
     expect(r.normalized.streetTrees).toBe(false);
   });
 });
 
 describe('rule 2: heavy jog and median islands are mutually exclusive', () => {
-  // Rule 8: heavy needs a fully freed curb, so rule-2 plans remove parking.
+  // Rule 8: heavy needs every existing parking lane removed.
   it('heavy + islands: keeps the jog, drops the islands, reason names the drop', () => {
     const r = gate(
       baseScene(),
-      mkPlan({ parking: { left: 'remove' }, jog: 'heavy', medianIslands: true }),
+      mkPlan({ parking: { left: 'remove', right: 'remove' }, jog: 'heavy', medianIslands: true }),
     );
     const s = stateOf(r, 'medianIslands');
     expect(s.status).toBe('disabled');
@@ -192,7 +193,10 @@ describe('rule 2: heavy jog and median islands are mutually exclusive', () => {
   });
 
   it('disables the islands control whenever heavy jog is selected, requested or not', () => {
-    const r = gate(baseScene(), mkPlan({ parking: { right: 'remove' }, jog: 'heavy' }));
+    const r = gate(
+      baseScene(),
+      mkPlan({ parking: { left: 'remove', right: 'remove' }, jog: 'heavy' }),
+    );
     expect(stateOf(r, 'medianIslands').status).toBe('disabled');
   });
 
@@ -211,7 +215,7 @@ describe('rule 2: heavy jog and median islands are mutually exclusive', () => {
   });
 });
 
-describe('rule 8: a heavy chicane needs a fully freed curb', () => {
+describe('rule 8: a heavy chicane needs every existing parking lane removed', () => {
   it('heavy with no parking removed softens to medium, reason on the jog control', () => {
     const r = gate(baseScene(), mkPlan({ jog: 'heavy' }));
     const s = stateOf(r, 'jog');
@@ -233,23 +237,37 @@ describe('rule 8: a heavy chicane needs a fully freed curb', () => {
     expect(stateOf(r, 'medianIslands').status).toBe('enabled');
   });
 
-  it('heavy stays heavy with the left curb freed', () => {
+  it('one removed curb is not enough when parking remains opposite', () => {
     const r = gate(baseScene(), mkPlan({ parking: { left: 'remove' }, jog: 'heavy' }));
+    expect(stateOf(r, 'jog').status).toBe('disabled');
+    expect(stateOf(r, 'jog').reason).toBe(REASONS.heavyJogNeedsParking);
+    expect(r.normalized.jog).toBe('medium');
+  });
+
+  it('heavy stays heavy when all existing parking is removed', () => {
+    const r = gate(
+      baseScene(),
+      mkPlan({ parking: { left: 'remove', right: 'remove' }, jog: 'heavy' }),
+    );
     expect(stateOf(r, 'jog').status).toBe('enabled');
-    expect(stateOf(r, 'jog').reason).toBeNull();
+    expect(stateOf(r, 'jog.heavy').status).toBe('enabled');
     expect(r.normalized.jog).toBe('heavy');
   });
 
-  it('heavy stays heavy with the right curb freed', () => {
-    const r = gate(baseScene(), mkPlan({ parking: { right: 'remove' }, jog: 'heavy' }));
+  it('a block with parking on one side needs only that side removed', () => {
+    const scene = baseScene();
+    scene.parkingLanes = scene.parkingLanes.filter((lane) => lane.side === 'left');
+    const r = gate(scene, mkPlan({ parking: { left: 'remove' }, jog: 'heavy' }));
     expect(stateOf(r, 'jog').status).toBe('enabled');
     expect(r.normalized.jog).toBe('heavy');
   });
 
-  it('medium is unaffected', () => {
+  it('medium stays enabled while the heavy option remains locked', () => {
     const r = gate(baseScene(), mkPlan({ jog: 'medium' }));
     expect(stateOf(r, 'jog').status).toBe('enabled');
     expect(stateOf(r, 'jog').reason).toBeNull();
+    expect(stateOf(r, 'jog.heavy').status).toBe('disabled');
+    expect(stateOf(r, 'jog.heavy').reason).toBe(REASONS.heavyJogNeedsParking);
     expect(r.normalized.jog).toBe('medium');
   });
 
@@ -296,7 +314,7 @@ describe('rule 9: median islands need two-way traffic', () => {
     scene.existingCalming = [{ type: 'traffic_island', pos: [60, 0], label: 'Painted island' }];
     const r = gate(
       scene,
-      mkPlan({ parking: { left: 'remove' }, jog: 'heavy', medianIslands: true }),
+      mkPlan({ parking: { left: 'remove', right: 'remove' }, jog: 'heavy', medianIslands: true }),
     );
     expect(stateOf(r, 'medianIslands').status).toBe('disabled');
     expect(stateOf(r, 'medianIslands').reason).toBe(REASONS.islandsOneWay);
@@ -346,6 +364,7 @@ describe("rule 3: bikeLane needs !sharedSurface and its side's parking removed",
       mkPlan({
         parking: { right: 'remove' },
         gateways: true,
+        jog: 'light',
         sharedSurface: true,
         bikeLane: 'right',
       }),
@@ -370,7 +389,7 @@ describe("rule 3: bikeLane needs !sharedSurface and its side's parking removed",
   });
 });
 
-describe('rule 4: sharedSurface requires geometric calming', () => {
+describe('rule 4: sharedSurface requires a plaza entry and bent path', () => {
   it('blocks a bare shared surface', () => {
     const r = gate(baseScene(), mkPlan({ sharedSurface: true }));
     const s = stateOf(r, 'sharedSurface');
@@ -379,36 +398,42 @@ describe('rule 4: sharedSurface requires geometric calming', () => {
     expect(r.normalized.sharedSurface).toBe(false);
   });
 
-  it('gateways satisfy it', () => {
+  it('gateways alone do not satisfy it', () => {
     const r = gate(baseScene(), mkPlan({ gateways: true, sharedSurface: true }));
-    expect(stateOf(r, 'sharedSurface').status).toBe('enabled');
-    expect(r.normalized.sharedSurface).toBe(true);
+    expect(stateOf(r, 'sharedSurface').status).toBe('disabled');
+    expect(r.normalized.sharedSurface).toBe(false);
   });
 
-  it('a light jog satisfies it', () => {
+  it('a light jog alone does not satisfy it', () => {
     const r = gate(baseScene(), mkPlan({ jog: 'light', sharedSurface: true }));
-    expect(r.normalized.sharedSurface).toBe(true);
+    expect(r.normalized.sharedSurface).toBe(false);
   });
 
-  it('median islands satisfy it', () => {
+  it('median islands alone do not satisfy it', () => {
     const r = gate(baseScene(), mkPlan({ medianIslands: true, sharedSurface: true }));
-    expect(r.normalized.sharedSurface).toBe(true);
+    expect(r.normalized.sharedSurface).toBe(false);
   });
 
-  it('heavy jog + islands + shared: islands drop but the jog still satisfies it', () => {
+  it('gateways plus a chicane make the shared plaza legal', () => {
     const r = gate(
       baseScene(),
-      mkPlan({ parking: { left: 'remove' }, jog: 'heavy', medianIslands: true, sharedSurface: true }),
+      mkPlan({
+        parking: { left: 'remove', right: 'remove' },
+        gateways: true,
+        jog: 'heavy',
+        medianIslands: true,
+        sharedSurface: true,
+      }),
     );
     expect(r.normalized.medianIslands).toBe(false);
     expect(r.normalized.sharedSurface).toBe(true);
     expect(stateOf(r, 'sharedSurface').status).toBe('enabled');
   });
 
-  it('existing calming (speed hump) satisfies it with nothing new requested', () => {
+  it('existing calming does not replace the plaza entry and path', () => {
     const r = gate(withCalmingScene(), mkPlan({ sharedSurface: true }));
-    expect(stateOf(r, 'sharedSurface').status).toBe('enabled');
-    expect(r.normalized.sharedSurface).toBe(true);
+    expect(stateOf(r, 'sharedSurface').status).toBe('disabled');
+    expect(r.normalized.sharedSurface).toBe(false);
   });
 });
 
@@ -480,7 +505,10 @@ describe('rule 6: existing features are preset — never propose what exists', (
   });
 
   it('preset outranks absorbed when sharedSurface is active', () => {
-    const r = gate(withBikeLaneScene('right'), mkPlan({ gateways: true, sharedSurface: true }));
+    const r = gate(
+      withBikeLaneScene('right'),
+      mkPlan({ gateways: true, jog: 'light', sharedSurface: true }),
+    );
     expect(stateOf(r, 'bikeLane.right').status).toBe('preset');
     expect(stateOf(r, 'bikeLane.left').status).toBe('absorbed');
   });
@@ -623,7 +651,7 @@ describe('rule 11: loadingZone', () => {
   it('NOT absorbed under sharedSurface: deliveries still pull aside', () => {
     const r = gate(
       baseScene(),
-      mkPlan({ gateways: true, sharedSurface: true, loadingZone: true }),
+      mkPlan({ gateways: true, jog: 'light', sharedSurface: true, loadingZone: true }),
     );
     expect(stateOf(r, 'loadingZone').status).toBe('enabled');
     expect(r.normalized.loadingZone).toBe(true);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type {
   ControlId,
@@ -12,212 +12,223 @@ import type {
 } from "@/lib/scene/types";
 import { paramsFromPlan } from "@/lib/plan";
 import { TODAY_PLAN } from "@/lib/scene/types";
+import { NotesButton } from "@/components/NotesButton";
 
 interface Props {
-  /** The requested plan (from the URL) — the base every interaction builds on. */
+  /** The requested plan from the URL. Every interaction preserves this intent. */
   plan: InterventionPlan;
-  /** The gate-normalized plan — what the plate actually shows. Segmented rows
-      display THIS as active, so a demoted request (heavy jog without a freed
-      curb) highlights what's really drawn while the URL keeps the intent. */
+  /** The gate-normalized plan that the plate actually shows. */
   applied: InterventionPlan;
   gates: GateState[];
-  schoolZone: boolean;
-  /** true = three rulebook columns (under the maps); false = single stack (sidebar). */
-  columns?: boolean;
 }
 
-/** One-line definitions, folded behind the Definitions toggle. Dry register, no dashes. */
+/** One-line definitions, folded behind the Definitions control. */
 const DEFS = {
   parking:
-    "Sets the parking lane per curb. Reduce keeps about half the bays, mid-block and clear of corners. Remove converts the lane to sidewalk.",
+    "Keep retains all legal spaces. Reduce retains about half in mid-block groups. Remove converts the curb lane to public space.",
   parklet: "Converts two parking spaces to a seating deck.",
-  jog: "Offsets the travel lane so drivers cannot hold a straight line.",
-  medianIslands: "Raised center refuges that shorten the crossing.",
-  gateways: "Raised, narrowed entry that marks a slow street. One-way blocks gate the entry end only.",
-  streetTrees: "New trees in the reclaimed curb lane.",
-  bikeLane: "Raised track between sidewalk and roadway, set 0.3 m off the curb.",
+  jog: "Offsets the travel path so drivers cannot hold a straight line.",
+  medianIslands: "Adds raised center refuges that shorten the crossing.",
+  gateways: "Adds raised, narrowed entries. One-way blocks use the entry end only.",
+  streetTrees: "Adds tree pits in reclaimed curb space, clear of cycle tracks.",
+  bikeLane: "Adds a raised cycle track in a fully reclaimed curb lane.",
   loadingZone: "Reserves a 12 m curb bay for deliveries.",
-  sharedSurface: "One surface, no curbs. All modes at walking pace.",
-  surface: "Roadway material. Pavers and cobbles lower speeds and raise per-vehicle noise.",
+  sharedSurface:
+    "Removes the curb only after gateways and a chicane create a protected, winding access route.",
+  surface: "Sets the unit paving. Rectangular pavers and rounded cobbles use distinct patterns.",
 } as const;
 
-/**
- * Gating is content, not friction: a nulled control goes grey and dead (it
- * should never feel possible) and says why in one line of editorial serif
- * when definitions are shown. The reason survives as a title tooltip always.
- */
-export function PlanControls({ plan, applied, gates, columns = true }: Props) {
+const PLAN_KEYS = [
+  "rpl",
+  "rpr",
+  "gw",
+  "jog",
+  "isl",
+  "trees",
+  "pklt",
+  "bike",
+  "lz",
+  "shared",
+  "surf",
+];
+
+export function PlanControls({ plan, applied, gates }: Props) {
   const router = useRouter();
   const sp = useSearchParams();
   const [showDefs, setShowDefs] = useState(false);
   const g = (id: ControlId): GateState | undefined =>
-    gates.find((s) => s.control === id);
-
-  const PLAN_KEYS = ["rpl", "rpr", "gw", "jog", "isl", "trees", "pklt", "bike", "lz", "shared", "surf"];
+    gates.find((state) => state.control === id);
 
   function push(next: InterventionPlan) {
-    // Preserve non-plan params (drawer state etc.) — the URL is the whole
-    // shareable workspace, not just the plan.
-    const p = new URLSearchParams(sp.toString());
-    for (const k of PLAN_KEYS) p.delete(k);
-    for (const [k, v] of paramsFromPlan(next)) p.set(k, v);
-    router.replace(`?${p.toString()}`, { scroll: false });
+    const params = new URLSearchParams(sp.toString());
+    for (const key of PLAN_KEYS) params.delete(key);
+    for (const [key, value] of paramsFromPlan(next)) params.set(key, value);
+    router.replace(`?${params.toString()}`, { scroll: false });
   }
 
-  const set = <K extends keyof InterventionPlan>(k: K, v: InterventionPlan[K]) =>
-    push({ ...plan, [k]: v });
-
+  const set = <K extends keyof InterventionPlan>(key: K, value: InterventionPlan[K]) =>
+    push({ ...plan, [key]: value });
   const dirty = JSON.stringify(plan) !== JSON.stringify(TODAY_PLAN);
 
   return (
-    <div className="text-[13px]">
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => push(TODAY_PLAN)}
-          disabled={!dirty}
-          className={`eyebrow border border-rule px-2.5 py-1.5 ${
-            dirty
-              ? "text-ink hover:bg-panel"
-              : "cursor-default border-hairline text-ink-faint"
-          }`}
-        >
-          Reset
-        </button>
-        <button
-          onClick={() => setShowDefs((v) => !v)}
-          className="eyebrow cursor-pointer text-ink-faint transition-colors hover:text-ink"
-          aria-pressed={showDefs}
-        >
-          {showDefs ? "Hide definitions" : "Definitions"}
-        </button>
+    <div className="border border-rule bg-panel text-[13px]">
+      <div className="flex min-h-12 items-center justify-between gap-3 bg-paper px-3 py-2">
+        <div className="flex items-center gap-2.5">
+          <h2 className="eyebrow text-ink">Edit plan</h2>
+          <span className={`eyebrow ${dirty ? "text-ink-soft" : "text-ink-faint"}`}>
+            {dirty ? "Edited" : "Today"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <NotesButton pressed={showDefs} onPressedChange={setShowDefs} />
+          <button
+            type="button"
+            onClick={() => push(TODAY_PLAN)}
+            disabled={!dirty}
+            className={`min-h-9 shrink-0 border px-2.5 text-[11px] font-semibold transition-colors ${
+              dirty
+                ? "border-rule bg-panel text-ink hover:bg-paper active:bg-hairline"
+                : "cursor-not-allowed border-hairline text-ink-faint opacity-60"
+            }`}
+          >
+            Reset
+          </button>
+        </div>
       </div>
 
-      {/* Under the plates, the three sections read as columns of a rulebook;
-          in a sidebar they stack. */}
-      <div className={`mt-6 grid items-start gap-x-8 gap-y-6 ${columns ? "md:grid-cols-3" : ""}`}>
-      <Section label="Parking">
-        <SegmentedRow<ParkingAction>
-          label="Parking, left curb"
-          def={DEFS.parking}
-          showDefs={showDefs}
-          value={applied.parking.left}
-          options={["keep", "reduce", "remove"]}
-          state={g("parking.left")}
-          optionState={(o) =>
-            o !== "keep" && g("parking.left")?.status !== "enabled" ? g("parking.left") : undefined
-          }
-          onChange={(v) => set("parking", { ...plan.parking, left: v })}
-        />
-        <SegmentedRow<ParkingAction>
-          label="Parking, right curb"
-          def={DEFS.parking}
-          showDefs={showDefs}
-          value={applied.parking.right}
-          options={["keep", "reduce", "remove"]}
-          state={g("parking.right")}
-          optionState={(o) =>
-            o !== "keep" && g("parking.right")?.status !== "enabled" ? g("parking.right") : undefined
-          }
-          onChange={(v) => set("parking", { ...plan.parking, right: v })}
-        />
-        <ToggleRow
-          label="Parklet (two spaces)"
-          def={DEFS.parklet}
-          showDefs={showDefs}
-          checked={applied.parklet}
-          state={g("parklet")}
-          onChange={(v) => set("parklet", v)}
-        />
-        <ToggleRow
-          label="Loading zone"
-          def={DEFS.loadingZone}
-          showDefs={showDefs}
-          checked={applied.loadingZone}
-          state={g("loadingZone")}
-          onChange={(v) => set("loadingZone", v)}
-        />
-      </Section>
+      <div>
+        <Section label="Curb use">
+          <SegmentedRow<ParkingAction>
+            label="Left curb parking"
+            def={DEFS.parking}
+            showDefs={showDefs}
+            value={applied.parking.left}
+            options={["keep", "reduce", "remove"]}
+            state={g("parking.left")}
+            optionState={(option) =>
+              option !== "keep" && g("parking.left")?.status !== "enabled"
+                ? g("parking.left")
+                : undefined
+            }
+            onChange={(value) => set("parking", { ...plan.parking, left: value })}
+          />
+          <SegmentedRow<ParkingAction>
+            label="Right curb parking"
+            def={DEFS.parking}
+            showDefs={showDefs}
+            value={applied.parking.right}
+            options={["keep", "reduce", "remove"]}
+            state={g("parking.right")}
+            optionState={(option) =>
+              option !== "keep" && g("parking.right")?.status !== "enabled"
+                ? g("parking.right")
+                : undefined
+            }
+            onChange={(value) => set("parking", { ...plan.parking, right: value })}
+          />
+          <ToggleRow
+            label="Add a parklet"
+            def={DEFS.parklet}
+            showDefs={showDefs}
+            checked={applied.parklet}
+            state={g("parklet")}
+            onChange={(value) => set("parklet", value)}
+          />
+          <ToggleRow
+            label="Add a loading zone"
+            def={DEFS.loadingZone}
+            showDefs={showDefs}
+            checked={applied.loadingZone}
+            state={g("loadingZone")}
+            onChange={(value) => set("loadingZone", value)}
+          />
+        </Section>
 
-      <Section label="Geometry">
-        <SegmentedRow<JogLevel>
-          label="Chicane (jog)"
-          def={DEFS.jog}
-          showDefs={showDefs}
-          value={applied.jog}
-          options={["none", "light", "medium", "heavy"]}
-          state={g("jog")}
-          optionState={(o) =>
-            o === "heavy" && g("jog")?.status === "disabled" ? g("jog") : undefined
-          }
-          onChange={(v) => set("jog", v)}
-        />
-        <ToggleRow
-          label="Median islands"
-          def={DEFS.medianIslands}
-          showDefs={showDefs}
-          checked={applied.medianIslands}
-          state={g("medianIslands")}
-          onChange={(v) => set("medianIslands", v)}
-        />
-        <ToggleRow
-          label="Gateways at both ends"
-          def={DEFS.gateways}
-          showDefs={showDefs}
-          checked={applied.gateways}
-          state={g("gateways")}
-          onChange={(v) => set("gateways", v)}
-        />
-      </Section>
+        <Section label="Street geometry">
+          <SegmentedRow<JogLevel>
+            label="Chicane"
+            def={DEFS.jog}
+            showDefs={showDefs}
+            value={applied.jog}
+            options={["none", "light", "medium", "heavy"]}
+            state={g("jog")}
+            optionState={(option) =>
+              option === "heavy" ? g("jog.heavy") : undefined
+            }
+            onChange={(value) => set("jog", value)}
+          />
+          <ToggleRow
+            label="Add median islands"
+            def={DEFS.medianIslands}
+            showDefs={showDefs}
+            checked={applied.medianIslands}
+            state={g("medianIslands")}
+            onChange={(value) => set("medianIslands", value)}
+          />
+          <ToggleRow
+            label="Add entry gateways"
+            def={DEFS.gateways}
+            showDefs={showDefs}
+            checked={applied.gateways}
+            state={g("gateways")}
+            onChange={(value) => set("gateways", value)}
+          />
+        </Section>
 
-      <Section label="Green & shared">
-        <ToggleRow
-          label="Street trees"
-          def={DEFS.streetTrees}
-          showDefs={showDefs}
-          checked={applied.streetTrees}
-          state={g("streetTrees")}
-          onChange={(v) => set("streetTrees", v)}
-        />
-        <SegmentedRow<"none" | "left" | "right">
-          label="Bike lane"
-          def={DEFS.bikeLane}
-          showDefs={showDefs}
-          value={applied.bikeLane}
-          options={["none", "left", "right"]}
-          state={g(plan.bikeLane === "left" ? "bikeLane.left" : "bikeLane.right")}
-          optionState={(o) =>
-            o === "none" ? undefined : g(o === "left" ? "bikeLane.left" : "bikeLane.right")
-          }
-          onChange={(v) => set("bikeLane", v)}
-        />
-        <ToggleRow
-          label="Shared surface"
-          def={DEFS.sharedSurface}
-          showDefs={showDefs}
-          checked={applied.sharedSurface}
-          state={g("sharedSurface")}
-          onChange={(v) => set("sharedSurface", v)}
-        />
-        <SegmentedRow<SurfaceKind>
-          label="Surface"
-          def={DEFS.surface}
-          showDefs={showDefs}
-          value={applied.surface}
-          options={["asphalt", "pavers", "cobbles"]}
-          state={g("surface")}
-          onChange={(v) => set("surface", v)}
-        />
-      </Section>
+        <Section label="Public realm">
+          <ToggleRow
+            label="Add street trees"
+            def={DEFS.streetTrees}
+            showDefs={showDefs}
+            checked={applied.streetTrees}
+            state={g("streetTrees")}
+            onChange={(value) => set("streetTrees", value)}
+          />
+          <SegmentedRow<"none" | "left" | "right">
+            label="Cycle track"
+            def={DEFS.bikeLane}
+            showDefs={showDefs}
+            value={applied.bikeLane}
+            options={["none", "left", "right"]}
+            state={g(plan.bikeLane === "left" ? "bikeLane.left" : "bikeLane.right")}
+            optionState={(option) =>
+              option === "none"
+                ? undefined
+                : g(option === "left" ? "bikeLane.left" : "bikeLane.right")
+            }
+            onChange={(value) => set("bikeLane", value)}
+          />
+          <ToggleRow
+            label="Create a shared plaza"
+            def={DEFS.sharedSurface}
+            showDefs={showDefs}
+            checked={applied.sharedSurface}
+            state={g("sharedSurface")}
+            onChange={(value) => set("sharedSurface", value)}
+          />
+          <SegmentedRow<SurfaceKind>
+            label="Paving"
+            def={DEFS.surface}
+            showDefs={showDefs}
+            value={applied.surface}
+            options={["asphalt", "pavers", "cobbles"]}
+            state={g("surface")}
+            onChange={(value) => set("surface", value)}
+          />
+        </Section>
       </div>
     </div>
   );
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
   return (
-    <section className="border-t border-rule pt-3">
-      <div className="eyebrow mb-3 text-ink-soft">{label}</div>
-      <div className="flex flex-col gap-3">{children}</div>
+    <section aria-labelledby={id} className="border-t border-rule">
+      <h3 id={id} className="eyebrow bg-paper px-3 py-2 text-ink-soft">
+        {label}
+      </h3>
+      <div className="divide-y divide-hairline px-3">{children}</div>
     </section>
   );
 }
@@ -230,19 +241,32 @@ function nulled(state?: GateState): boolean {
   );
 }
 
-function Definition({ def, show }: { def: string; show: boolean }) {
-  if (!show) return null;
-  return (
-    <p className="serif mt-1 text-[13px] italic leading-[1.35] text-ink-faint">{def}</p>
-  );
+function statusLabel(state?: GateState): string | null {
+  if (state?.status === "preset") return "Built today";
+  if (state?.status === "absorbed") return "Included";
+  return null;
 }
 
-function Reason({ state, show }: { state?: GateState; show: boolean }) {
-  if (!show || !state || state.status === "enabled" || !state.reason) return null;
+function Guidance({
+  def,
+  state,
+  show,
+  id,
+}: {
+  def: string;
+  state?: GateState;
+  show: boolean;
+  id: string;
+}) {
+  const reason = state?.status !== "enabled" ? state?.reason : null;
+  if (!show && !reason) return null;
   return (
-    <p className="serif mt-1.5 text-[13px] italic leading-[1.35] text-ink-soft">
-      {state.reason}
-    </p>
+    <div id={id} className={show ? "mt-2 space-y-1.5" : "sr-only"}>
+      {show && <p className="serif text-[13px] italic leading-[1.4] text-ink-faint">{def}</p>}
+      {reason && (
+        <p className="serif text-[13px] italic leading-[1.4] text-ink-soft">{reason}</p>
+      )}
+    </div>
   );
 }
 
@@ -259,39 +283,60 @@ function ToggleRow({
   showDefs: boolean;
   checked: boolean;
   state?: GateState;
-  onChange: (v: boolean) => void;
+  onChange: (value: boolean) => void;
 }) {
+  const inputId = useId();
+  const guidanceId = `${inputId}-guidance`;
   const dead = nulled(state);
-  const absorbed = state?.status === "absorbed";
+  const shownChecked = state?.status === "preset" ? true : state?.status === "disabled" ? false : checked;
+  const badge = statusLabel(state);
+  const hasGuidance = showDefs || Boolean(state?.reason);
+
   return (
-    <div title={state?.reason ?? def}>
+    <div className="py-3" title={state?.reason ?? def}>
       <label
-        className={`flex items-center justify-between gap-3 ${
-          dead ? "cursor-not-allowed text-ink-faint opacity-60" : "cursor-pointer"
+        htmlFor={inputId}
+        className={`flex min-h-11 items-center justify-between gap-4 ${
+          dead ? "cursor-not-allowed text-ink-faint" : "cursor-pointer text-ink"
         }`}
       >
-        <span className={absorbed ? "line-through decoration-ink-faint" : ""}>
+        <span className="leading-[1.35]">
           {label}
-          {state?.status === "preset" && (
-            <span className="eyebrow ml-2 text-ink-faint">Built</span>
+          {badge && (
+            <span aria-hidden="true" className="eyebrow ms-2 text-ink-faint">
+              {badge}
+            </span>
           )}
         </span>
         <input
+          id={inputId}
           type="checkbox"
-          checked={
-            state?.status === "preset"
-              ? true
-              : state?.status === "disabled"
-                ? false
-                : checked
-          }
+          checked={shownChecked}
           disabled={dead}
-          onChange={(e) => onChange(e.target.checked)}
-          className={`h-4 w-4 accent-ink ${dead ? "cursor-not-allowed opacity-50" : ""}`}
+          aria-describedby={hasGuidance ? guidanceId : undefined}
+          onChange={(event) => onChange(event.target.checked)}
+          className="peer sr-only"
         />
+        <span
+          aria-hidden="true"
+          className={`relative h-5 w-9 shrink-0 border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink ${
+            dead
+              ? shownChecked
+                ? "border-hairline bg-ink/20 opacity-60"
+                : "border-hairline bg-paper opacity-60"
+              : shownChecked
+                ? "border-ink bg-ink"
+                : "border-rule bg-paper"
+          }`}
+        >
+          <span
+            className={`absolute start-[2px] top-[2px] size-3.5 transition-transform ${
+              shownChecked ? "translate-x-4 bg-paper" : "bg-ink-faint"
+            }`}
+          />
+        </span>
       </label>
-      <Definition def={def} show={showDefs} />
-      <Reason state={state} show={showDefs} />
+      <Guidance def={def} state={state} show={showDefs} id={guidanceId} />
     </div>
   );
 }
@@ -312,40 +357,64 @@ function SegmentedRow<T extends string>({
   value: T;
   options: T[];
   state?: GateState;
-  optionState?: (o: T) => GateState | undefined;
-  onChange: (v: T) => void;
+  optionState?: (option: T) => GateState | undefined;
+  onChange: (value: T) => void;
 }) {
+  const labelId = useId();
+  const guidanceId = `${labelId}-guidance`;
   const rowDead = nulled(state) && !optionState;
+  const optionReasonState = options
+    .map((option) => optionState?.(option))
+    .find((optionGate) => optionGate?.reason);
+  const guidanceState = state?.reason ? state : optionReasonState;
+  const hasGuidance = showDefs || Boolean(guidanceState?.reason);
+
   return (
-    <div title={state?.reason ?? def}>
-      <div className={`mb-1.5 ${rowDead ? "text-ink-faint" : ""}`}>{label}</div>
-      <div className={`flex border ${rowDead ? "border-hairline" : "border-rule"}`}>
-        {options.map((o, i) => {
-          const os = optionState?.(o);
-          const dead = rowDead || nulled(os);
-          const active = value === o;
+    <div className="py-3" title={state?.reason ?? def}>
+      <div id={labelId} className={`mb-2 leading-[1.35] ${rowDead ? "text-ink-faint" : "text-ink"}`}>
+        {label}
+        {statusLabel(state) && (
+          <span aria-hidden="true" className="eyebrow ms-2 text-ink-faint">
+            {statusLabel(state)}
+          </span>
+        )}
+      </div>
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        aria-describedby={hasGuidance ? guidanceId : undefined}
+        className={`grid border ${rowDead ? "border-hairline" : "border-rule"}`}
+        style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      >
+        {options.map((option, index) => {
+          const optionGate = optionState?.(option);
+          const dead = rowDead || nulled(optionGate);
+          const active = value === option;
           return (
             <button
-              key={o}
+              key={option}
+              type="button"
               disabled={dead}
-              title={os?.reason ?? undefined}
-              onClick={() => onChange(o)}
-              className={`eyebrow flex-1 px-1 py-2 transition-colors ${i > 0 ? "border-l border-hairline" : ""} ${
+              aria-pressed={active}
+              title={optionGate?.reason ?? undefined}
+              onClick={() => onChange(option)}
+              className={`eyebrow min-h-10 px-1.5 transition-colors ${
+                index > 0 ? "border-s border-hairline" : ""
+              } ${
                 active && !dead
                   ? "bg-ink text-paper"
                   : dead
-                    ? "cursor-not-allowed text-ink-faint opacity-50"
-                    : "text-ink-soft hover:bg-paper"
+                    ? "cursor-not-allowed bg-paper text-ink-faint opacity-55"
+                    : "bg-panel text-ink-soft hover:bg-paper hover:text-ink"
               }`}
             >
-              {o}
-              {os?.status === "preset" ? " ✓" : ""}
+              {option}
+              {optionGate?.status === "preset" ? " ✓" : ""}
             </button>
           );
         })}
       </div>
-      <Definition def={def} show={showDefs} />
-      <Reason state={state} show={showDefs} />
+      <Guidance def={def} state={guidanceState} show={showDefs} id={guidanceId} />
     </div>
   );
 }

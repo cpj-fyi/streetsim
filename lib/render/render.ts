@@ -43,17 +43,23 @@ export function renderScene(scene: BlockScene, opts: RenderOptions): string {
     sidewalksLayer(scene, vp),
     roadbedLayer(scene, vp, p),
     reclaimedLayer(scene, vp),
+    sharedSurfaceLayer(scene, vp, p),
+    parkingSurfaceLayer(scene, vp),
     bikeLaneLayer(scene, vp),
     loadingLayer(scene, vp),
     islandsLayer(scene, vp),
     curbLayer(scene, vp),
+    roadMarkingsLayer(scene, vp),
     markingsLayer(scene, vp),
     arrowsLayer(scene, vp),
     buildingsLayer(scene, vp, p),
     treesLayer(scene, vp),
-    peopleLayer(scene, vp),
+    loadingLabelLayer(scene, vp),
   ];
-  if (showLabels) layers.push(labelsLayer(scene, vp));
+  if (showLabels) {
+    layers.push(labelsLayer(scene, vp));
+    layers.push(plateAnnotationsLayer(scene, vp));
+  }
 
   return el(
     'svg',
@@ -73,9 +79,12 @@ export function renderScene(scene: BlockScene, opts: RenderOptions): string {
 function defs(vp: Viewport, p: string): string {
   const s = vp.pxPerM;
   const sh = T.shadow.building;
-  const paverW = 0.62 * s;
-  const paverH = 0.31 * s;
-  const cobble = 0.3 * s;
+  const pavers = T.surfacePattern.pavers;
+  const paverW = pavers.moduleWidthM * s;
+  const paverH = pavers.courseHeightM * s;
+  const cobbles = T.surfacePattern.cobbles;
+  const cobbleW = cobbles.moduleWidthM * s;
+  const cobbleH = cobbles.moduleHeightM * s;
   return el(
     'defs',
     {},
@@ -92,22 +101,38 @@ function defs(vp: Viewport, p: string): string {
           el('rect', { x: 0, y: 0, width: paverW, height: paverH * 2, fill: 'none' }),
           el('path', {
             d: `M0 ${n(paverH)}H${n(paverW)}M0 ${n(paverH * 2)}H${n(paverW)}M${n(paverW / 2)} 0V${n(paverH)}M0 ${n(paverH)}M${n(paverW)} ${n(paverH)}M0 ${n(paverH * 2)}`,
-            stroke: '#00000010',
-            'stroke-width': T.stroke.hairline,
+            stroke: pavers.stroke,
+            'stroke-width': pavers.strokeWidthPx,
           }),
           el('path', {
             d: `M0 0V${n(paverH)}M${n(paverW)} ${n(paverH)}V${n(paverH * 2)}`,
-            stroke: '#00000010',
-            'stroke-width': T.stroke.hairline,
+            stroke: pavers.stroke,
+            'stroke-width': pavers.strokeWidthPx,
           }),
         ].join(''),
       ),
       el(
         'pattern',
-        { id: `${p}-cobbles`, width: cobble * 2, height: cobble * 2, patternUnits: 'userSpaceOnUse' },
+        {
+          id: `${p}-cobbles`,
+          width: cobbleW * 2,
+          height: cobbleH * 2,
+          patternUnits: 'userSpaceOnUse',
+        },
         [
-          el('circle', { cx: cobble / 2, cy: cobble / 2, r: cobble * 0.34, fill: '#00000009' }),
-          el('circle', { cx: cobble * 1.5, cy: cobble * 1.5, r: cobble * 0.34, fill: '#00000009' }),
+          ...[0.5, 1.5].flatMap((x) =>
+            [0.5, 1.5].map((y) =>
+              el('ellipse', {
+                cx: cobbleW * x,
+                cy: cobbleH * y,
+                rx: cobbleW * cobbles.radiusXRatio,
+                ry: cobbleH * cobbles.radiusYRatio,
+                fill: 'none',
+                stroke: cobbles.stroke,
+                'stroke-width': cobbles.strokeWidthPx,
+              }),
+            ),
+          ),
         ].join(''),
       ),
     ].join(''),
@@ -153,48 +178,164 @@ function reclaimedLayer(scene: BlockScene, vp: Viewport): string {
   const fillFor: Record<string, string> = {
     open: T.color.sidewalk,
     planting: T.color.sidewalk,
+    chicane: T.color.reclaimed.chicane,
     seating: T.color.reclaimed.seating,
     parklet: T.color.reclaimed.parklet,
     gateway: T.color.reclaimed.gateway,
     island: T.color.reclaimed.island,
   };
-  const curbed = new Set(['island', 'gateway', 'parklet']);
-  const items = [...scene.reclaimed]
-    .sort((a, b) => keyOfPoly(a.poly).localeCompare(keyOfPoly(b.poly)))
-    .map((r) =>
+  const curbed = new Set(['island', 'gateway', 'parklet', 'seating', 'chicane']);
+  const items: string[] = [];
+  for (const r of [...scene.reclaimed].sort((a, b) =>
+    keyOfPoly(a.poly).localeCompare(keyOfPoly(b.poly)),
+  )) {
+    items.push(
       el('path', {
         d: polyPath(vp, r.poly, curbed.has(r.use) ? T.radius.parkletCorner * vp.pxPerM : 0),
         fill: fillFor[r.use] ?? T.color.sidewalk,
-        stroke: curbed.has(r.use) ? T.color.curb : null,
-        'stroke-width': curbed.has(r.use) ? T.stroke.hairline : null,
+        stroke:
+          r.use === 'chicane' || r.use === 'seating'
+            ? T.color.reclaimed.chicaneEdge
+            : curbed.has(r.use)
+              ? T.color.curb
+              : null,
+        'stroke-width':
+          r.use === 'chicane' || r.use === 'seating'
+            ? T.stroke.chicaneEdge
+            : curbed.has(r.use)
+              ? T.stroke.hairline
+              : null,
       }),
     );
+    if (r.use !== 'seating') continue;
+    const [cx, cy] = centroid(r.poly.exterior);
+    const bench = toPx(vp, [
+      cx - T.furniture.benchLengthM / 2,
+      cy + T.furniture.benchWidthM / 2,
+    ]);
+    items.push(
+      el('rect', {
+        x: bench[0],
+        y: bench[1],
+        width: T.furniture.benchLengthM * vp.pxPerM,
+        height: T.furniture.benchWidthM * vp.pxPerM,
+        rx: T.furniture.benchCornerRadiusM * vp.pxPerM,
+        fill: T.color.furniture.bench,
+      }),
+    );
+    for (const direction of [-1, 1]) {
+      const boulder = toPx(vp, [
+        cx + direction * T.furniture.plazaBoulderOffsetM,
+        cy,
+      ]);
+      items.push(
+        el('circle', {
+          cx: boulder[0],
+          cy: boulder[1],
+          r: T.furniture.plazaBoulderRadiusM * vp.pxPerM,
+          fill: T.color.furniture.boulder,
+          stroke: T.color.curb,
+          'stroke-width': T.stroke.boulderEdge,
+        }),
+      );
+      items.push(
+        el('circle', {
+          cx: boulder[0] - T.furniture.plazaBoulderHighlightOffsetM * vp.pxPerM,
+          cy: boulder[1] - T.furniture.plazaBoulderHighlightOffsetM * vp.pxPerM,
+          r: T.furniture.plazaBoulderHighlightRadiusM * vp.pxPerM,
+          fill: T.color.furniture.boulderHighlight,
+        }),
+      );
+    }
+  }
   return group({ 'data-layer': 'reclaimed' }, items);
+}
+
+/**
+ * A shared surface is carried by the paving itself, not an ambiguous symbol.
+ * The same aligned pattern spans roadway, reclaimed curb space, and surveyed
+ * sidewalks. Planting beds and raised objects remain distinct above it.
+ */
+function sharedSurfaceLayer(scene: BlockScene, vp: Viewport, p: string): string {
+  if (!scene.sharedSurface) return group({ 'data-layer': 'shared' }, []);
+  const polys = [
+    ...scene.sidewalks.map((sidewalk) => sidewalk.poly),
+    effectiveRoadbed(scene),
+    ...scene.reclaimed
+      .filter((item) => item.use === 'open' || item.use === 'planting')
+      .map((item) => item.poly),
+  ];
+  const items: string[] = [];
+  for (const poly of polys) {
+    const d = polyPath(vp, poly);
+    items.push(el('path', { d, fill: surfaceFill(scene) }));
+    if (scene.surface === 'pavers') items.push(el('path', { d, fill: `url(#${p}-pavers)` }));
+    if (scene.surface === 'cobbles') items.push(el('path', { d, fill: `url(#${p}-cobbles)` }));
+  }
+  return group({ 'data-layer': 'shared' }, items);
+}
+
+function facilityOffsets(scene: BlockScene, side: 'left' | 'right'): [number, number] {
+  const lane = scene.existingBikeLane;
+  const hasParking = scene.parkingLanes.some((parking) => parking.side === side);
+  if (!lane || lane.side !== side) return [0, 0];
+  if (lane.kind === 'protected') {
+    return [T.furniture.bikeLaneInsetM, T.furniture.bikeLaneInsetM + T.furniture.existingBikeLaneWidthM];
+  }
+  const start = hasParking
+    ? T.furniture.parkingBandDepthM + T.furniture.existingBikeBufferM
+    : T.furniture.bikeLaneInsetM;
+  return [start, start + T.furniture.existingBikeLaneWidthM];
+}
+
+function parkingOffset(scene: BlockScene, side: 'left' | 'right'): number {
+  if (scene.existingBikeLane?.side !== side || scene.existingBikeLane.kind !== 'protected') return 0;
+  const [, far] = facilityOffsets(scene, side);
+  return far + T.furniture.existingBikeBufferM;
 }
 
 function bikeLaneLayer(scene: BlockScene, vp: Viewport): string {
   const items: string[] = [];
   // Existing lane is infrastructure that renders in BOTH scenes (§4 rule 6).
-  // Clamped clear of the corner flares, and offset past the parking band on
-  // its side — a painted Class 2 lane runs between parked cars and the
-  // travel lane, not at the curb (BEAUTY_LOG Loop 3).
-  if (scene.existingBikeLane && !scene.sharedSurface) {
+  // DOT's facility class controls its roadbed position: conventional lanes
+  // sit traffic-side of parking, while protected lanes sit curbside and push
+  // parked cars inward to form the protection zone.
+  if (scene.existingBikeLane && scene.existingBikeLane.kind !== 'shared' && !scene.sharedSurface) {
     const side = scene.existingBikeLane.side;
-    const curb = scene.curbs.find((c) => c.side === side);
+    const curb = scene.curbs.find((candidate) => candidate.side === side);
     if (curb) {
       const xs = boundsX(scene.roadbed.exterior);
       const inward = side === 'left' ? -1 : 1;
-      const hasParking = scene.parkingLanes.some((l) => l.side === side && l.extentsX.length > 0);
-      // Danish stepped track: the band sits off the curb edge by a fixed
-      // inset, reading as the step between sidewalk and track level.
-      const offset = (hasParking ? T.furniture.parkingBandDepthM : 0) + T.furniture.bikeLaneInsetM;
-      const shifted: XY[] = curb.line.map((p) => [p[0], p[1] + offset * inward]);
-      const band = bandAlongCurb(shifted, xs[0] + 5, xs[1] - 5, 1.5 * inward);
-      if (band) items.push(el('path', { d: ringPath(ringToPx(vp, band)), fill: T.color.bikeLane }));
+      const inset = T.furniture.bikeLaneInsetM;
+      const [near, far] = facilityOffsets(scene, side);
+      const band = stripAlongCurb(
+        curb.line,
+        xs[0] + inset,
+        xs[1] - inset,
+        near * inward,
+        far * inward,
+      );
+      if (band) {
+        items.push(
+          el('path', {
+            d: ringPath(ringToPx(vp, band)),
+            fill: T.color.bikeLane,
+            stroke: T.color.bikeLaneEdge,
+            'stroke-width': T.stroke.bikeLaneEdge,
+          }),
+        );
+      }
     }
   }
   if (scene.bikeLane) {
-    items.push(el('path', { d: polyPath(vp, scene.bikeLane.poly), fill: T.color.bikeLane }));
+    items.push(
+      el('path', {
+        d: polyPath(vp, scene.bikeLane.poly),
+        fill: T.color.bikeLane,
+        stroke: T.color.bikeLaneEdge,
+        'stroke-width': T.stroke.bikeLaneEdge,
+      }),
+    );
   }
   return group({ 'data-layer': 'bike' }, items);
 }
@@ -212,30 +353,33 @@ function loadingLayer(scene: BlockScene, vp: Viewport): string {
         'stroke-dasharray': T.stroke.loadingDash.join(' '),
       }),
     );
-    const c = centroid(lz.poly.exterior);
-    const pt = toPx(vp, c);
-    const bt = T.type.badge;
-    // Label only when the bay is long enough to hold it quietly.
-    if ((lz.x1 - lz.x0) * vp.pxPerM > 46) {
-      items.push(
-        el(
-          'text',
-          {
-            x: pt[0],
-            y: pt[1],
-            'text-anchor': 'middle',
-            'dominant-baseline': 'central',
-            fill: T.color.label.badge,
-            'font-size': bt.size,
-            'font-weight': bt.weight,
-            'letter-spacing': bt.tracking,
-          },
-          'LOADING',
-        ),
-      );
-    }
   }
   return group({ 'data-layer': 'loading' }, items);
+}
+
+function loadingLabelLayer(scene: BlockScene, vp: Viewport): string {
+  const lz = scene.loadingZone;
+  if (!lz || (lz.x1 - lz.x0) * vp.pxPerM <= T.furniture.loadingLabelMinWidthPx) {
+    return group({ 'data-layer': 'loading-label' }, []);
+  }
+  const pt = toPx(vp, centroid(lz.poly.exterior));
+  const bt = T.type.badge;
+  return group({ 'data-layer': 'loading-label' }, [
+    el(
+      'text',
+      {
+        x: pt[0],
+        y: pt[1],
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central',
+        fill: T.color.label.badge,
+        'font-size': bt.size,
+        'font-weight': bt.weight,
+        'letter-spacing': bt.tracking,
+      },
+      'LOADING',
+    ),
+  ]);
 }
 
 function islandsLayer(scene: BlockScene, vp: Viewport): string {
@@ -263,6 +407,7 @@ function islandsLayer(scene: BlockScene, vp: Viewport): string {
 }
 
 function curbLayer(scene: BlockScene, vp: Viewport): string {
+  if (scene.sharedSurface) return group({ 'data-layer': 'curb' }, []);
   const rb = effectiveRoadbed(scene);
   const d = polyPath(vp, rb, T.radius.curbCornerMin * vp.pxPerM * 0.4);
   return group({ 'data-layer': 'curb' }, [
@@ -270,11 +415,139 @@ function curbLayer(scene: BlockScene, vp: Viewport): string {
   ]);
 }
 
+function parkingSurfaceLayer(scene: BlockScene, vp: Viewport): string {
+  const items: string[] = [];
+  const depth = T.furniture.parkingBandDepthM;
+  const lanes = [...scene.parkingLanes].sort((a, b) =>
+    (a.side + a.extentsX.join()).localeCompare(b.side + b.extentsX.join()),
+  );
+  for (const lane of lanes) {
+    const curb = scene.curbs.find((candidate) => candidate.side === lane.side);
+    if (!curb) continue;
+    const inward = lane.side === 'left' ? -1 : 1;
+    const offset = parkingOffset(scene, lane.side);
+    for (const [x0, x1] of lane.extentsX) {
+      const band = stripAlongCurb(
+        curb.line,
+        x0,
+        x1,
+        offset * inward,
+        (offset + depth) * inward,
+      );
+      if (band) {
+        items.push(el('path', { d: ringPath(ringToPx(vp, band)), fill: T.color.parkingBand }));
+      }
+    }
+  }
+  return group({ 'data-layer': 'parking' }, items);
+}
+
+function roadMarkingsLayer(scene: BlockScene, vp: Viewport): string {
+  if (scene.sharedSurface) return group({ 'data-layer': 'road-markings' }, []);
+  const items: string[] = [];
+  const [roadX0, roadX1] = boundsX(scene.roadbed.exterior);
+  const x0 = roadX0 + T.furniture.roadMarkingEndInsetM;
+  const x1 = roadX1 - T.furniture.roadMarkingEndInsetM;
+  const left = scene.curbs.find((curb) => curb.side === 'left');
+  const right = scene.curbs.find((curb) => curb.side === 'right');
+  const laneCount = scene.segment.travelLanes ?? (scene.oneWay ? 1 : 2);
+  if (left && right && x1 > x0 && laneCount > 1) {
+    const xs = [
+      x0,
+      ...left.line.map(([x]) => x).filter((x) => x > x0 && x < x1),
+      ...right.line.map(([x]) => x).filter((x) => x > x0 && x < x1),
+      x1,
+    ].sort((a, b) => a - b);
+    const measured = xs.flatMap((x) => {
+      const leftY = interpY(left.line, x);
+      const rightY = interpY(right.line, x);
+      return leftY === null || rightY === null ? [] : [leftY - rightY];
+    });
+    const sortedWidths = [...measured].sort((a, b) => a - b);
+    const typicalWidth = sortedWidths[Math.floor(sortedWidths.length / 2)] ?? 0;
+    for (let divider = 1; divider < laneCount; divider++) {
+      const fraction = divider / laneCount;
+      const runs: XY[][] = [];
+      let run: XY[] = [];
+      for (const x of xs) {
+        const leftY = interpY(left.line, x);
+        const rightY = interpY(right.line, x);
+        const width = leftY === null || rightY === null ? 0 : leftY - rightY;
+        const inNormalWidth =
+          typicalWidth > 0 &&
+          width >= typicalWidth / T.furniture.roadMarkingWidthToleranceRatio &&
+          width <= typicalWidth * T.furniture.roadMarkingWidthToleranceRatio;
+        if (leftY === null || rightY === null || !inNormalWidth) {
+          if (run.length >= 2) runs.push(run);
+          run = [];
+          continue;
+        }
+        run.push([x, rightY + width * fraction]);
+      }
+      if (run.length >= 2) runs.push(run);
+      for (const points of runs) {
+        items.push(
+          el('path', {
+            d: points
+            .map((point, index) => {
+              const [px, py] = toPx(vp, point);
+              return `${index === 0 ? 'M' : 'L'}${n(px)} ${n(py)}`;
+            })
+            .join(''),
+          fill: 'none',
+          stroke: T.color.marking.laneLine,
+          'stroke-width': T.stroke.laneDash,
+          'stroke-dasharray': T.dash.laneLine.join(' '),
+            'stroke-linecap': 'round',
+          }),
+        );
+      }
+    }
+  }
+
+  const existing = scene.existingBikeLane;
+  if (existing) {
+    const curb = scene.curbs.find((candidate) => candidate.side === existing.side);
+    if (curb) {
+      const inward = existing.side === 'left' ? -1 : 1;
+      const [near, far] = facilityOffsets(scene, existing.side);
+      const centerOffset = (near + far) / 2;
+      for (const fraction of T.furniture.bikeGlyph.positions) {
+        const x = roadX0 + (roadX1 - roadX0) * fraction;
+        const curbY = interpY(curb.line, x);
+        if (curbY === null) continue;
+        items.push(bikeGlyphMark(vp, x, curbY + inward * centerOffset));
+      }
+    }
+  }
+  return group({ 'data-layer': 'road-markings' }, items);
+}
+
+function bikeGlyphMark(vp: Viewport, x: number, y: number): string {
+  const glyph = T.furniture.bikeGlyph;
+  const rear = toPx(vp, [x - glyph.wheelGapM / 2, y]);
+  const front = toPx(vp, [x + glyph.wheelGapM / 2, y]);
+  const frame = toPx(vp, [x, y + glyph.frameHeightM]);
+  const radius = glyph.wheelRadiusM * vp.pxPerM;
+  const common = {
+    fill: 'none',
+    stroke: T.color.marking.bikeGlyph,
+    'stroke-width': glyph.strokeWidthPx,
+  };
+  return [
+    el('circle', { cx: rear[0], cy: rear[1], r: radius, ...common }),
+    el('circle', { cx: front[0], cy: front[1], r: radius, ...common }),
+    el('path', {
+      d: `M${n(rear[0])} ${n(rear[1])}L${n(frame[0])} ${n(frame[1])}L${n(front[0])} ${n(front[1])}L${n(rear[0])} ${n(rear[1])}`,
+      ...common,
+      'stroke-linejoin': 'round',
+    }),
+  ].join('');
+}
+
 function markingsLayer(scene: BlockScene, vp: Viewport): string {
-  // Parking looks like cars (user feedback 2026-08-10): quiet rounded
-  // vehicle masses parked along each regulated extent — ~85% occupancy with
-  // deterministic gaps, because a fully parked block reads as a diagram.
-  // The faint band still marks the regulated extent beneath them.
+  // Parking is an inferred bay rhythm with deterministic vacancies. Bay ticks
+  // explain the legal capacity, while detailed top-down cars show occupancy.
   const items: string[] = [];
   const depth = T.furniture.parkingBandDepthM;
   const carL = T.furniture.carLengthM;
@@ -286,47 +559,118 @@ function markingsLayer(scene: BlockScene, vp: Viewport): string {
     const curb = scene.curbs.find((c) => c.side === lane.side);
     if (!curb) continue;
     const inward = lane.side === 'left' ? -1 : 1; // from curb toward centerline
+    const offset = parkingOffset(scene, lane.side);
+    let slotOrdinal = 0;
     for (const [x0, x1] of lane.extentsX) {
-      const band = bandAlongCurb(curb.line, x0, x1, depth * inward);
-      if (band) {
-        items.push(el('path', { d: ringPath(ringToPx(vp, band)), fill: T.color.parkingBand }));
-      }
-      let slot = 0;
-      for (let x = x0 + space / 2; x <= x1 - space / 2 + 1e-6; x += space, slot++) {
-        // Deterministic vacancies keep the row alive, not diagrammatic.
-        if (hash01(`${seed}:${lane.side}`, slot) < 0.15) continue;
+      const slotCount = Math.max(1, Math.floor((x1 - x0) / space + 1e-6));
+      const slotW = (x1 - x0) / slotCount;
+      for (let slot = 0; slot <= slotCount; slot++) {
+        const x = x0 + slot * slotW;
         const yCurb = interpY(curb.line, x);
         if (yCurb === null) continue;
-        const yCenter = yCurb + inward * (depth / 2);
-        const a = toPx(vp, [x - carL / 2, yCenter + carW / 2]);
+        const near = toPx(vp, [x, yCurb + inward * (offset + T.furniture.parkingSpaceMarkInsetM)]);
+        const far = toPx(
+          vp,
+          [x, yCurb + inward * (offset + T.furniture.parkingSpaceMarkDepthM)],
+        );
         items.push(
-          el('rect', {
-            x: a[0],
-            y: a[1],
-            width: carL * vp.pxPerM,
-            height: carW * vp.pxPerM,
-            rx: 0.55 * vp.pxPerM,
-            fill: T.color.vehicle,
-            stroke: T.color.curb,
-            'stroke-width': T.stroke.hairline,
+          el('line', {
+            x1: near[0],
+            y1: near[1],
+            x2: far[0],
+            y2: far[1],
+            stroke: T.color.marking.parkingSpace,
+            'stroke-width': T.stroke.parkingSpace,
+            'stroke-linecap': 'round',
           }),
         );
+      }
+      for (let slot = 0; slot < slotCount; slot++, slotOrdinal++) {
+        const x = x0 + (slot + 0.5) * slotW;
+        // Deterministic vacancies vary across separate regulated extents too.
+        if (hash01(`${seed}:${lane.side}`, slotOrdinal) > T.furniture.parkingOccupancy) continue;
+        const yCurb = interpY(curb.line, x);
+        if (yCurb === null) continue;
+        const yCenter = yCurb + inward * (offset + depth / 2);
+        items.push(vehicleMark(vp, x, yCenter, carL, carW));
       }
     }
   }
   return group({ 'data-layer': 'markings' }, items);
 }
 
-/** Strip between a curb polyline and its parallel offset, clipped to [x0,x1]. */
-function bandAlongCurb(curbLine: XY[], x0: number, x1: number, signedDepth: number): XY[] | null {
+function vehicleMark(
+  vp: Viewport,
+  x: number,
+  y: number,
+  lengthM: number,
+  widthM: number,
+): string {
+  const body = toPx(vp, [x - lengthM / 2, y + widthM / 2]);
+  const cabinLength = T.furniture.carCabinLengthM;
+  const cabinWidth = T.furniture.carCabinWidthM;
+  const [frontDivider, rearDivider] = T.furniture.carCabinDividerFractions;
+  const cabin = toPx(vp, [x - cabinLength / 2, y + cabinWidth / 2]);
+  return [
+    el('rect', {
+      x: body[0],
+      y: body[1],
+      width: lengthM * vp.pxPerM,
+      height: widthM * vp.pxPerM,
+      rx: T.furniture.carCornerRadiusM * vp.pxPerM,
+      fill: T.color.vehicle,
+      stroke: T.color.vehicleDetail,
+      'stroke-width': T.stroke.hairline,
+    }),
+    el('rect', {
+      x: cabin[0],
+      y: cabin[1],
+      width: cabinLength * vp.pxPerM,
+      height: cabinWidth * vp.pxPerM,
+      rx: T.furniture.carCabinRadiusM * vp.pxPerM,
+      fill: T.color.vehicleGlass,
+      stroke: T.color.vehicleDetail,
+      'stroke-width': T.stroke.vehicleDetail,
+    }),
+    el('line', {
+      x1: cabin[0] + cabinLength * vp.pxPerM * frontDivider,
+      y1: cabin[1],
+      x2: cabin[0] + cabinLength * vp.pxPerM * frontDivider,
+      y2: cabin[1] + cabinWidth * vp.pxPerM,
+      stroke: T.color.vehicleDetail,
+      'stroke-width': T.stroke.vehicleDetail,
+    }),
+    el('line', {
+      x1: cabin[0] + cabinLength * vp.pxPerM * rearDivider,
+      y1: cabin[1],
+      x2: cabin[0] + cabinLength * vp.pxPerM * rearDivider,
+      y2: cabin[1] + cabinWidth * vp.pxPerM,
+      stroke: T.color.vehicleDetail,
+      'stroke-width': T.stroke.vehicleDetail,
+    }),
+  ].join('');
+}
+
+/** Strip between two parallel offsets from a curb, clipped to [x0,x1]. */
+function stripAlongCurb(
+  curbLine: XY[],
+  x0: number,
+  x1: number,
+  signedNear: number,
+  signedFar: number,
+): XY[] | null {
   const forward: XY[] = [];
   const y0 = interpY(curbLine, x0);
   const y1 = interpY(curbLine, x1);
   if (y0 === null || y1 === null) return null;
-  forward.push([x0, y0]);
-  for (const p of curbLine) if (p[0] > x0 && p[0] < x1) forward.push(p);
-  forward.push([x1, y1]);
-  const back = forward.map((p): XY => [p[0], p[1] + signedDepth]).reverse();
+  forward.push([x0, y0 + signedNear]);
+  for (const p of curbLine) {
+    if (p[0] > x0 && p[0] < x1) forward.push([p[0], p[1] + signedNear]);
+  }
+  forward.push([x1, y1 + signedNear]);
+  const back = forward
+    .map((p): XY => [p[0], p[1] - signedNear + signedFar])
+    .reverse();
   return [...forward, ...back];
 }
 
@@ -450,26 +794,6 @@ function treeMark(vp: Viewport, pos: XY, radiusM: number, fill: string): string 
   );
 }
 
-function peopleLayer(scene: BlockScene, vp: Viewport): string {
-  // Quiet dots, and only where they mean something: the shared surface is
-  // what invites people into the street, so people appear only there
-  // (BEAUTY_LOG Loop 1 §3 — base sidewalk dots read as specks; deleted).
-  const seed = scene.segment.segmentId;
-  const dots: string[] = [];
-  if (scene.sharedSurface) {
-    const rb = effectiveRoadbed(scene);
-    const c = centroid(rb.exterior);
-    const bx = boundsX(rb.exterior);
-    for (let k = 0; k < 4; k++) {
-      const x = bx[0] + (bx[1] - bx[0]) * (0.15 + 0.7 * hash01(seed, 100 + k));
-      const y = c[1] + (hash01(seed, 200 + k) - 0.5) * 3.5;
-      const pt = toPx(vp, [x, y]);
-      dots.push(el('circle', { cx: pt[0], cy: pt[1], r: T.furniture.personRadiusM * vp.pxPerM, fill: T.color.people }));
-    }
-  }
-  return group({ 'data-layer': 'people' }, dots);
-}
-
 function labelsLayer(scene: BlockScene, vp: Viewport): string {
   const items: string[] = [];
   const st = T.type.street;
@@ -541,9 +865,100 @@ function labelsLayer(scene: BlockScene, vp: Viewport): string {
       ),
     );
   }
-  // School-zone badge lives in the HTML cartouche now, not the plate.
   items.push(scaleBar(vp));
   return group({ 'data-layer': 'labels' }, items);
+}
+
+/** Compact regulatory facts in the plate's top-right corner. */
+function plateAnnotationsLayer(scene: BlockScene, vp: Viewport): string {
+  const token = T.plateAnnotation;
+  const speed = token.speedSign;
+  const speedX = vp.widthPx - token.insetPx - speed.widthPx;
+  const speedY = token.insetPx;
+  const speedCenterX = speedX + speed.widthPx / 2;
+  const items: string[] = [
+    el('rect', {
+      x: speedX,
+      y: speedY,
+      width: speed.widthPx,
+      height: speed.heightPx,
+      rx: speed.radiusPx,
+      fill: T.color.paper,
+      stroke: T.color.label.badge,
+      'stroke-width': speed.strokeWidthPx,
+    }),
+    el(
+      'text',
+      {
+        x: speedCenterX,
+        y: speedY + speed.speedBaselinePx,
+        'text-anchor': 'middle',
+        fill: T.color.label.badge,
+        'font-size': speed.labelSizePx,
+        'font-weight': speed.labelWeight,
+      },
+      'SPEED',
+    ),
+    el(
+      'text',
+      {
+        x: speedCenterX,
+        y: speedY + speed.limitBaselinePx,
+        'text-anchor': 'middle',
+        fill: T.color.label.badge,
+        'font-size': speed.labelSizePx,
+        'font-weight': speed.labelWeight,
+      },
+      'LIMIT',
+    ),
+    el(
+      'text',
+      {
+        x: speedCenterX,
+        y: speedY + speed.numberBaselinePx,
+        'text-anchor': 'middle',
+        fill: T.color.label.badge,
+        'font-size': speed.numberSizePx,
+        'font-weight': speed.numberWeight,
+      },
+      String(scene.postedLimitMph),
+    ),
+  ];
+
+  if (scene.oneWay) {
+    const oneWay = token.oneWaySign;
+    const oneWayX = speedX - token.gapPx - oneWay.widthPx;
+    const oneWayY = token.insetPx;
+    const arrow = scene.travelDir < 0 ? '← ONE WAY' : 'ONE WAY →';
+    items.push(
+      el('rect', {
+        x: oneWayX,
+        y: oneWayY,
+        width: oneWay.widthPx,
+        height: oneWay.heightPx,
+        rx: oneWay.radiusPx,
+        fill: T.color.label.badge,
+        stroke: T.color.label.badge,
+        'stroke-width': oneWay.strokeWidthPx,
+      }),
+      el(
+        'text',
+        {
+          x: oneWayX + oneWay.widthPx / 2,
+          y: oneWayY + oneWay.heightPx / 2,
+          'text-anchor': 'middle',
+          'dominant-baseline': 'central',
+          fill: T.color.paper,
+          'font-size': oneWay.fontSizePx,
+          'font-weight': oneWay.fontWeight,
+          'letter-spacing': oneWay.trackingPx,
+        },
+        arrow,
+      ),
+    );
+  }
+
+  return group({ 'data-layer': 'annotations' }, items);
 }
 
 /**

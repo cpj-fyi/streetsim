@@ -22,21 +22,21 @@
  *   while removing both cannot (the dropped side carries the reason with the
  *   real widths). Gate evaluates the canonical reduce layout (no tree-grid
  *   nudge); the nudge moves clusters, never their count or depth.
- * - Rule 7: streetTrees is data-nulled on already-canopied blocks: tree
- *   density >= 12 per 100 m, or provenance.canopyFraction >= 0.40 when
+ * - Rule 7: streetTrees is data-nulled only on exceptionally canopied blocks:
+ *   tree density >= 24 per 100 m, or provenance.canopyFraction >= 0.65 when
  *   present (absent = unknown, never triggers). Outranks rule 1.
- * - Rule 6: any existing calming feature proves motor traffic is already
- *   being slowed, so it satisfies rule 4's calming prerequisite for
- *   sharedSurface. Existing curb extensions preset 'jog', existing islands
- *   preset 'medianIslands'; requesting them anyway adds more. Vertical
- *   calming maps to no control.
+ * - Rule 4: a shared surface is a plaza system, not a material swap. It needs
+ *   entry gateways plus a chicane so vehicles cross a raised threshold and
+ *   follow a bent access path. Existing calming alone is not enough.
+ * - Rule 6: existing curb extensions preset 'jog' and existing islands preset
+ *   'medianIslands'; requesting them anyway adds more. Vertical calming maps
+ *   to no control.
  * - Preset beats absorbed beats disabled for bikeLane state precedence.
  * - Rule 2 resolution keeps the jog and drops the islands; evaluated AFTER
  *   rule 8 so only a surviving heavy jog suppresses islands.
- * - Rule 8: a heavy chicane sweeps through the parked lane, so jog:'heavy'
- *   requires parking 'remove' on at least one side ('reduce' keeps bays the
- *   sweep would hit; it does not qualify). Without one the request SOFTENS
- *   to 'medium' and the jog control carries the reason.
+ * - Rule 8: a heavy chicane alternates across both curbs, so every existing
+ *   parking lane must be removed. 'keep' and 'reduce' leave cars in the
+ *   sweep. Otherwise the request SOFTENS to 'medium' and carries the reason.
  * - Rule 9: median islands separate opposing streams; a one-way block
  *   data-nulls the request. Outranks rule 2 and any preset.
  * - Rule 3: a bike lane needs its side's parking set to 'remove' ('reduce'
@@ -103,9 +103,9 @@ export const REASONS = {
     'On a shared surface the whole street is the bike lane. A separate stripe adds nothing.',
   bikeLaneAlreadyBuilt: 'Already built. This side has a bike lane today.',
   sharedNeedsCalming:
-    'A bare shared surface is paint. Add a chicane, median islands, or gateways first so the shape of the street slows drivers before the curb line comes out.',
+    'A shared plaza needs controlled entries and a bent access path. Add entry gateways and a chicane before removing the curb.',
   heavyJogNeedsParking:
-    'A heavy chicane sweeps through the parked lane. Set parking to remove on at least one side to unlock it. Showing a medium chicane instead.',
+    'A heavy chicane alternates across both curbs. Remove parking on every existing side to unlock it. Showing a medium chicane instead.',
   islandsOneWay:
     'This is a one-way street. There is no opposing traffic to separate, and the crossing is already short.',
   parkletAbsorbed:
@@ -123,8 +123,8 @@ export const REASONS = {
 } as const;
 
 /** Rule 7 thresholds: a block this treed doesn't need more trees. */
-export const TREE_DENSITY_PER_100M = 12;
-export const CANOPY_FRACTION_LIMIT = 0.4;
+export const TREE_DENSITY_PER_100M = 24;
+export const CANOPY_FRACTION_LIMIT = 0.65;
 
 /**
  * Rule 7 reason, with the block's real numbers interpolated (product copy,
@@ -228,22 +228,23 @@ export function gate(scene: BlockScene, requested: InterventionPlan): GateResult
   // block data-nulls the request (before rules 2 and 4).
   if (scene.oneWay) n.medianIslands = false;
 
-  // Rule 8: a heavy chicane needs a fully freed curb: 'remove' on at least
-  // one side (post lane-existence and rule-10 normalization), or it softens
-  // to medium.
-  const anyRemoved = n.parking.left === 'remove' || n.parking.right === 'remove';
-  const heavyDemoted = n.jog === 'heavy' && !anyRemoved;
+  // Rule 8: an alternating heavy chicane needs every existing parking lane
+  // fully removed after lane-existence and minimum-width normalization.
+  const allExistingParkingRemoved =
+    (!laneL || n.parking.left === 'remove') && (!laneR || n.parking.right === 'remove');
+  const heavyLocked = !allExistingParkingRemoved;
+  const heavyDemoted = n.jog === 'heavy' && heavyLocked;
   if (heavyDemoted) n.jog = 'medium';
 
   // Rule 2: heavy jog + islands: keep the jog, drop the islands. Evaluated
   // after rule 8, so only a SURVIVING heavy jog suppresses islands.
   if (n.jog === 'heavy' && n.medianIslands) n.medianIslands = false;
 
-  // Rule 4: sharedSurface needs geometric calming, new (jog >= light,
-  // islands, gateways, evaluated after rule 2) or already built.
-  const hasCalming =
-    n.jog !== 'none' || n.medianIslands || n.gateways || scene.existingCalming.length > 0;
-  if (n.sharedSurface && !hasCalming) n.sharedSurface = false;
+  // Rule 4: removing the curb only becomes a plaza when both the entry and
+  // the through path force low-speed behavior. Material or signage alone is
+  // not traffic calming.
+  const hasPlazaGeometry = n.gateways && n.jog !== 'none';
+  if (n.sharedSurface && !hasPlazaGeometry) n.sharedSurface = false;
 
   // Rule 3: under a (surviving) shared surface the bike lane is absorbed;
   // otherwise it needs that same side's parking fully removed.
@@ -335,6 +336,11 @@ export function gate(scene: BlockScene, requested: InterventionPlan): GateResult
   } else {
     push('jog', 'enabled', null);
   }
+  push(
+    'jog.heavy',
+    heavyLocked ? 'disabled' : 'enabled',
+    heavyLocked ? REASONS.heavyJogNeedsParking : null,
+  );
 
   if (scene.oneWay) {
     // Rule 9 outranks everything on this control.
@@ -390,8 +396,8 @@ export function gate(scene: BlockScene, requested: InterventionPlan): GateResult
 
   push(
     'sharedSurface',
-    hasCalming ? 'enabled' : 'disabled',
-    hasCalming ? null : REASONS.sharedNeedsCalming,
+    hasPlazaGeometry ? 'enabled' : 'disabled',
+    hasPlazaGeometry ? null : REASONS.sharedNeedsCalming,
   );
 
   push('surface', 'enabled', null);

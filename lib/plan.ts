@@ -74,3 +74,42 @@ export function maxCalmingPlan(schoolZone: boolean): InterventionPlan {
     surface: 'pavers',
   };
 }
+
+/**
+ * Opinionated starting plans for the three homepage examples. These are
+ * deliberately distinct so each link demonstrates an edited street rather
+ * than opening the fixture in its Today state.
+ */
+export function examplePlanForKind(kind: string): InterventionPlan {
+  if (kind === 'wide-oneway') {
+    return {
+      ...TODAY_PLAN,
+      parking: { left: 'remove', right: 'remove' },
+      gateways: true,
+      jog: 'heavy',
+      streetTrees: true,
+      sharedSurface: true,
+      surface: 'pavers',
+    };
+  }
+  if (kind === 'narrow-twoway') {
+    return {
+      ...TODAY_PLAN,
+      parking: { left: 'remove', right: 'reduce' },
+      gateways: true,
+      jog: 'medium',
+      streetTrees: true,
+      sharedSurface: true,
+      surface: 'pavers',
+    };
+  }
+  return {
+    ...TODAY_PLAN,
+    parking: { left: 'remove', right: 'remove' },
+    gateways: true,
+    jog: 'heavy',
+    streetTrees: true,
+    sharedSurface: true,
+    surface: 'pavers',
+  };
+}

@@ -232,6 +232,28 @@ describe('parking remove moves the curb', () => {
     expect(hasVertexNear(out.roadbedAfter as Poly, [9.5, -2.7])).toBe(true);
   });
 
+  it('preserves surveyed median holes when a parking lane is removed', () => {
+    const scene = baseScene();
+    scene.roadbed = {
+      ...scene.roadbed,
+      holes: [
+        [
+          [50, -1],
+          [50, 1],
+          [70, 1],
+          [70, -1],
+        ],
+      ],
+    };
+    const out = applyPlan(scene, mkPlan({ parking: { right: 'remove' } }));
+
+    expect(out.roadbedAfter?.holes).toHaveLength(1);
+    expect(polyArea(out.roadbedAfter as Poly)).toBeCloseTo(
+      polyArea(scene.roadbed) - BAND_SIDE_AREA,
+      2,
+    );
+  });
+
   it('removing both sides empties parkingLanes and narrows both curbs', () => {
     const out = applyPlan(baseScene(), mkPlan({ parking: { left: 'remove', right: 'remove' } }));
     expect(out.parkingLanes).toEqual([]);
@@ -315,17 +337,16 @@ describe("parking 'reduce' keeps mid-block bay clusters", () => {
     expect(lenAfter).toBeCloseTo(8 * 5.5, 6);
   });
 
-  it('with streetTrees on, clusters snap to the 8 m tree grid and pits avoid the bays', () => {
+  it('with streetTrees on, retained bays stay canonical and pits avoid them', () => {
     const out = applyPlan(
       baseScene(),
       mkPlan({ parking: { right: 'reduce' }, streetTrees: true }),
     );
     const lane = out.parkingLanes.find((l) => l.side === 'right')!;
-    for (const [c0] of lane.extentsX) {
-      // Cluster starts sit on the 8 m grid measured from their extent start.
-      const fromStart = c0 <= 52 ? c0 - 8 : c0 - 58;
-      expect(fromStart % 8).toBeCloseTo(0, 6);
-    }
+    expect(lane.extentsX).toEqual([
+      [19, 41],
+      [74, 96],
+    ]);
     // No new tree stands inside a retained bay cluster.
     for (const [tx] of out.addedTrees) {
       for (const [c0, c1] of lane.extentsX) {
@@ -431,27 +452,30 @@ describe('clean curb profiles (built-concrete rules)', () => {
 });
 
 describe('streetTrees', () => {
-  it('plants at 8 m spacing, ≥ 6 m from ends, ≥ 7 m apart, inside the planting bands', () => {
+  it('plants more trees at irregular spacing, at least 5 m from ends, inside the planting bands', () => {
     const out = applyPlan(
       baseScene(),
       mkPlan({ parking: { left: 'remove', right: 'remove' }, streetTrees: true }),
     );
-    // 13 grid candidates per side; 4 per side sit under existing crowns and are skipped.
-    expect(out.addedTrees.length).toBe(18);
+    expect(out.addedTrees.length).toBeGreaterThan(18);
     const bands = out.reclaimed.filter((r) => r.use === 'planting');
     expect(bands).toHaveLength(2);
     for (const t of out.addedTrees) {
-      expect(t[0]).toBeGreaterThanOrEqual(6);
-      expect(t[0]).toBeLessThanOrEqual(114);
+      expect(t[0]).toBeGreaterThanOrEqual(5);
+      expect(t[0]).toBeLessThanOrEqual(115);
       expect(bands.some((b) => pointInPoly(b.poly, t))).toBe(true);
     }
     for (let i = 0; i < out.addedTrees.length; i++) {
       for (let j = i + 1; j < out.addedTrees.length; j++) {
         const [ax, ay] = out.addedTrees[i];
         const [bx, by] = out.addedTrees[j];
-        expect(Math.hypot(ax - bx, ay - by)).toBeGreaterThanOrEqual(7);
+        if (Math.sign(ay) === Math.sign(by)) {
+          expect(Math.hypot(ax - bx, ay - by)).toBeGreaterThanOrEqual(5.8 - 1e-6);
+        }
       }
     }
+    const sameSideY = out.addedTrees.filter(([, y]) => y < 0).map(([, y]) => y);
+    expect(new Set(sameSideY.map((y) => y.toFixed(3))).size).toBeGreaterThan(2);
   });
 
   it('never mixes new trees into existingTrees', () => {
@@ -464,11 +488,28 @@ describe('streetTrees', () => {
 
   it('plants only on the freed side', () => {
     const out = applyPlan(baseScene(), mkPlan({ parking: { right: 'remove' }, streetTrees: true }));
-    expect(out.addedTrees.length).toBe(9); // 13 candidates, 4 under existing crowns
+    expect(out.addedTrees.length).toBeGreaterThan(9);
     for (const [, y] of out.addedTrees) expect(y).toBeLessThan(0);
   });
 
-  it('skips candidates under an existing crown — no re-spacing, neighbors stay put', () => {
+  it('keeps every new tree off a planned cycle track', () => {
+    const out = applyPlan(
+      baseScene(),
+      mkPlan({
+        parking: { left: 'remove', right: 'remove' },
+        streetTrees: true,
+        bikeLane: 'right',
+      }),
+    );
+    expect(out.bikeLane?.side).toBe('right');
+    expect(out.addedTrees.length).toBeGreaterThan(0);
+    for (const tree of out.addedTrees) {
+      expect(tree[1]).toBeGreaterThan(0);
+      expect(pointInPoly(out.bikeLane!.poly, tree)).toBe(false);
+    }
+  });
+
+  it('skips every irregular candidate under an existing crown', () => {
     const scene = baseScene();
     // One mature London plane mid-block: crown = 0.28·30 = 8.4 m → clearance 10.4 m.
     scene.existingTrees = [
@@ -479,12 +520,10 @@ describe('streetTrees', () => {
     for (const [tx, ty] of out.addedTrees) {
       expect(Math.hypot(tx - 60, ty - -6.75)).toBeGreaterThanOrEqual(clearance);
     }
-    // Grid candidates 52, 60, 68 fall under the crown and are skipped…
     expect(out.addedTrees.some(([x]) => x > 51 && x < 69)).toBe(false);
-    expect(out.addedTrees.length).toBe(10); // 13 candidates − 3 shaded
-    // …while the flanking candidates keep their 8 m grid positions.
-    expect(out.addedTrees.some(([x]) => Math.abs(x - 44) < 1e-6)).toBe(true);
-    expect(out.addedTrees.some(([x]) => Math.abs(x - 76) < 1e-6)).toBe(true);
+    expect(out.addedTrees.length).toBeGreaterThan(10);
+    expect(out.addedTrees.some(([x]) => x < 51)).toBe(true);
+    expect(out.addedTrees.some(([x]) => x > 69)).toBe(true);
   });
 
   it('plants nothing on an already-canopied block (rule 7 nulls the request)', () => {
@@ -561,7 +600,7 @@ describe('gateways', () => {
 describe('jog', () => {
   it('medium: three alternating trapezoid build-outs, roadbedAfter loses their area', () => {
     const out = applyPlan(baseScene(), mkPlan({ jog: 'medium' }));
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos).toHaveLength(3);
     const sides = bos.map((b) => (ringBounds(b.poly).minY > 0 ? 'left' : 'right'));
     expect(sides).toEqual(['left', 'right', 'left']); // alternating, low-x → high-x
@@ -579,7 +618,7 @@ describe('jog', () => {
     const scene = narrowScene();
     const out = applyPlan(scene, mkPlan({ jog: 'heavy' }));
     expect(out.plan?.jog).toBe('medium');
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos).toHaveLength(3);
     for (const b of bos) {
       const bb = ringBounds(b.poly);
@@ -597,10 +636,10 @@ describe('jog', () => {
     const b1 = ySpanAt(after, 70 / 3)!; // build-out 1 (left) borrows the right sidewalk
     expect(b1[0]).toBeCloseTo(-4.1, 6); // −3.5 − 0.6
     expect(b1[0] - -7).toBeCloseTo(2.9, 6); // 3.5 − 0.6 = 2.9 ≥ 1.8
-    // Borrowed strips displace the parked bays under them.
+    // Both build-outs and borrowed strips displace parked bays under them.
     const lane = out.parkingLanes.find((l) => l.side === 'right')!;
     expect(lane.extentsX.length).toBe(4);
-    expect(lane.spaces).toBe(11); // 17 − 3 − 3
+    expect(lane.spaces).toBe(9);
     // NET invariant: reclaimed − borrowed = carriageway lost.
     expect(borrowedArea(scene, out)).toBeCloseTo(3 * 0.6 * (14 - 2.6), 0);
     expectNetInvariant(scene, out, 'narrow borrow');
@@ -612,7 +651,7 @@ describe('jog', () => {
     // borrowable sidewalk (2.4 − 1.8): depth degrades to 1.6 m.
     const scene = tightScene();
     const out = applyPlan(scene, mkPlan({ jog: 'medium' }));
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos).toHaveLength(3);
     const after = out.roadbedAfter as Poly;
     for (const b of bos) {
@@ -632,7 +671,7 @@ describe('jog', () => {
     const scene = narrowScene();
     scene.existingBikeLane = { side: 'right', kind: 'standard' };
     const out = applyPlan(scene, mkPlan({ jog: 'medium' }));
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     // Left build-outs face the right (bike) side: clamped to 2.0, no borrow.
     for (const b of bos) {
       const bb = ringBounds(b.poly);
@@ -643,27 +682,29 @@ describe('jog', () => {
     expect(borrowedArea(scene, out)).toBeLessThan(3 * 0.6 * (14 - 2.6)); // only the right BO borrows left
   });
 
-  it('keeps full 3.2 m depth on a wide block with a freed curb', () => {
-    // Rule 8 makes heavy imply a freed curb; 12 − 2.3 − 3.2 = 6.5 ≥ 5.0.
-    const out = applyPlan(wideScene(), mkPlan({ parking: { right: 'remove' }, jog: 'heavy' }));
+  it('keeps full 3.2 m depth on a wide block after all parking is removed', () => {
+    const out = applyPlan(
+      wideScene(),
+      mkPlan({ parking: { left: 'remove', right: 'remove' }, jog: 'heavy' }),
+    );
     expect(out.plan?.jog).toBe('heavy');
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos).toHaveLength(4);
-    const first = ringBounds(bos[0].poly); // left side, parking retained: surveyed curb at 6
-    expect(first.maxY).toBeCloseTo(6, 6);
-    expect(first.minY).toBeCloseTo(6 - 3.2, 6);
+    const first = ringBounds(bos[0].poly);
+    expect(first.maxY).toBeCloseTo(6 - 2.3, 6);
+    expect(first.minY).toBeCloseTo(6 - 2.3 - 3.2, 6);
   });
 
   it('heavy jog + islands normalizes to jog only', () => {
     const out = applyPlan(
       baseScene(),
-      mkPlan({ parking: { left: 'remove' }, jog: 'heavy', medianIslands: true }),
+      mkPlan({ parking: { left: 'remove', right: 'remove' }, jog: 'heavy', medianIslands: true }),
     );
     expect(out.plan?.jog).toBe('heavy');
     expect(out.plan?.medianIslands).toBe(false);
     expect(out.islands).toEqual([]);
     expect((out.roadbedAfter as Poly).holes).toEqual([]);
-    expect(out.reclaimed.filter((r) => r.use === 'planting')).toHaveLength(4);
+    expect(out.reclaimed.filter((r) => r.use === 'chicane')).toHaveLength(4);
   });
 
   it('heavy jog without a freed curb renders as the medium chicane', () => {
@@ -677,11 +718,28 @@ describe('jog', () => {
   it("build-outs dodge a reduced side's retained bay clusters", () => {
     const out = applyPlan(baseScene(), mkPlan({ parking: { right: 'reduce' }, jog: 'medium' }));
     const lane = out.parkingLanes.find((l) => l.side === 'right')!;
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos.length).toBeGreaterThan(0);
     for (const bo of bos) {
       const bb = ringBounds(bo.poly);
       if (bb.minY > 0) continue; // left side: clusters are on the right
+      for (const [c0, c1] of lane.extentsX) {
+        const overlap = Math.min(bb.maxX, c1) - Math.max(bb.minX, c0);
+        expect(overlap).toBeLessThanOrEqual(1e-6);
+      }
+    }
+  });
+
+  it('clears opposite-curb parking through every chicane pinch', () => {
+    const out = applyPlan(
+      baseScene(),
+      mkPlan({ parking: { left: 'reduce', right: 'remove' }, jog: 'medium' }),
+    );
+    const lane = out.parkingLanes.find((l) => l.side === 'left')!;
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
+    expect(bos.some((bo) => ringBounds(bo.poly).maxY < 0)).toBe(true);
+    for (const bo of bos) {
+      const bb = ringBounds(bo.poly);
       for (const [c0, c1] of lane.extentsX) {
         const overlap = Math.min(bb.maxX, c1) - Math.max(bb.minX, c0);
         expect(overlap).toBeLessThanOrEqual(1e-6);
@@ -698,7 +756,7 @@ describe('jog composes with the moved curb', () => {
       mkPlan({ parking: { left: 'remove', right: 'remove' }, jog: 'light' }),
     );
     const bands = out.reclaimed.filter((r) => r.use === 'open');
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bands).toHaveLength(2); // one continuous band ribbon per side
     expect(bos).toHaveLength(2);
     // BO1 (left, [26.5, 38.5]): rides the NEW curb at 5 − 2.3 = 2.7 with its
@@ -725,7 +783,7 @@ describe('jog composes with the moved curb', () => {
 
   it('with one lane freed, the freed side stacks band + build-out; the other is untouched', () => {
     const out = applyPlan(baseScene(), mkPlan({ parking: { left: 'remove' }, jog: 'light' }));
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos).toHaveLength(2);
     // BO1 (left, freed side): full 2.0 m depth from the new curb — total intrusion
     // from the surveyed curb is 2.3 + 2.0 = 4.3 m. No borrow: 7.7 − 2.0 ≥ 5.0.
@@ -804,7 +862,7 @@ describe('medianIslands', () => {
   it('light jog + islands coexist: build-outs slide off the island footprints', () => {
     const out = applyPlan(baseScene(), mkPlan({ jog: 'light', medianIslands: true }));
     expect(out.islands).toHaveLength(2);
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos).toHaveLength(2);
     for (const bo of bos) {
       const bb = ringBounds(bo.poly);
@@ -818,26 +876,30 @@ describe('medianIslands', () => {
 });
 
 describe('bikeLane (Danish stepped track)', () => {
-  it('lays a 1.8 m lane inset 0.3 m from the curb; step strip and 0.2 m buffer remain', () => {
+  it('centers a 1.8 m lane within the freed band with equal 0.25 m buffers', () => {
     const out = applyPlan(baseScene(), mkPlan({ parking: { right: 'remove' }, bikeLane: 'right' }));
     expect(out.bikeLane).not.toBeNull();
     expect(out.bikeLane?.side).toBe('right');
     const lane = ringBounds(out.bikeLane!.poly);
-    expect(lane.minX).toBeCloseTo(8, 6); // hull of the freed extents
-    expect(lane.maxX).toBeCloseTo(112, 6);
-    expect(lane.minY).toBeCloseTo(-5 + 0.3, 6); // 0.3 m step off the curb line
-    expect(lane.maxY).toBeCloseTo(-5 + 2.1, 6); // 1.8 m wide
+    expect(lane.minX).toBeCloseTo(9.75, 6); // inset equally from the taper ends
+    expect(lane.maxX).toBeCloseTo(110.25, 6);
+    expect(lane.minY).toBeCloseTo(-5 + 0.25, 6);
+    expect(lane.maxY).toBeCloseTo(-5 + 2.05, 6); // 1.8 m wide
     const buffers = out.reclaimed.filter((r) => r.use === 'open');
-    expect(buffers).toHaveLength(2); // step strip + outer buffer
-    const step = ringBounds(buffers[0].poly);
+    expect(buffers).toHaveLength(4); // two end caps + step strip + outer buffer
+    const middleBuffers = buffers
+      .map((buffer) => ringBounds(buffer.poly))
+      .filter((bounds) => bounds.minX > 9.7 && bounds.maxX < 110.3);
+    expect(middleBuffers).toHaveLength(2);
+    const step = middleBuffers.find((bounds) => bounds.minY < -4.9)!;
     expect(step.minY).toBeCloseTo(-5, 6);
-    expect(step.maxY).toBeCloseTo(-5 + 0.3, 6);
-    const buf = ringBounds(buffers[1].poly);
-    expect(buf.minY).toBeCloseTo(-5 + 2.1, 6);
-    expect(buf.maxY).toBeCloseTo(-5 + 2.3, 6); // the remaining 0.2 m
+    expect(step.maxY).toBeCloseTo(-5 + 0.25, 6);
+    const buf = middleBuffers.find((bounds) => bounds.maxY > -2.8)!;
+    expect(buf.minY).toBeCloseTo(-5 + 2.05, 6);
+    expect(buf.maxY).toBeCloseTo(-5 + 2.3, 6);
     for (const b of [step, buf]) {
-      expect(b.minX).toBeCloseTo(9.5, 6); // flat stretch only (tapers excluded)
-      expect(b.maxX).toBeCloseTo(110.5, 6);
+      expect(b.minX).toBeCloseTo(9.75, 6);
+      expect(b.maxX).toBeCloseTo(110.25, 6);
     }
     // The carriageway still narrows by the full band — the lane rides the freed strip.
     expect(polyArea(out.roadbedAfter as Poly)).toBeCloseTo(BASE_ROADBED_AREA - BAND_SIDE_AREA, 2);
@@ -849,6 +911,7 @@ describe('bikeLane (Danish stepped track)', () => {
       mkPlan({
         parking: { right: 'remove' },
         gateways: true,
+        jog: 'light',
         sharedSurface: true,
         bikeLane: 'right',
       }),
@@ -902,7 +965,7 @@ describe('parklet', () => {
   it('same-side jog build-outs slide off the parklet', () => {
     const out = applyPlan(baseScene(), mkPlan({ parklet: true, jog: 'light' }));
     const parklet = out.reclaimed.find((r) => r.use === 'parklet')!;
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'chicane');
     expect(bos).toHaveLength(2);
     const pb = ringBounds(parklet.poly); // right side, [78.9, 91.1]
     for (const bo of bos) {
@@ -1005,7 +1068,7 @@ describe('loadingZone', () => {
   it('stays placed on a shared surface (deliveries pull aside; not absorbed)', () => {
     const out = applyPlan(
       baseScene(),
-      mkPlan({ gateways: true, sharedSurface: true, loadingZone: true }),
+      mkPlan({ gateways: true, jog: 'light', sharedSurface: true, loadingZone: true }),
     );
     expect(out.plan?.loadingZone).toBe(true);
     expect(out.loadingZone).not.toBeNull();
@@ -1067,7 +1130,10 @@ describe('reclaimed polygons tile (metrics sums their areas)', () => {
 
 describe('sharedSurface and surface', () => {
   it('sharedSurface defaults the surface to pavers', () => {
-    const out = applyPlan(baseScene(), mkPlan({ gateways: true, sharedSurface: true }));
+    const out = applyPlan(
+      baseScene(),
+      mkPlan({ gateways: true, jog: 'light', sharedSurface: true }),
+    );
     expect(out.sharedSurface).toBe(true);
     expect(out.surface).toBe('pavers');
   });
@@ -1075,7 +1141,7 @@ describe('sharedSurface and surface', () => {
   it('an explicit surface choice survives sharedSurface', () => {
     const out = applyPlan(
       baseScene(),
-      mkPlan({ gateways: true, sharedSurface: true, surface: 'cobbles' }),
+      mkPlan({ gateways: true, jog: 'light', sharedSurface: true, surface: 'cobbles' }),
     );
     expect(out.surface).toBe('cobbles');
   });
@@ -1127,7 +1193,7 @@ describe('full-plan integration', () => {
     expect(out.loadingZone).not.toBeNull();
     expect(out.addedTrees.length).toBeGreaterThan(0);
     // Both build-outs keep their full 2.0 m depth by borrowing the far band.
-    const bos = out.reclaimed.filter((r) => r.use === 'planting');
+    const bos = out.reclaimed.filter((r) => r.use === 'seating');
     expect(bos.length).toBeGreaterThanOrEqual(1);
     const after = out.roadbedAfter as Poly;
     for (const bo of bos) {

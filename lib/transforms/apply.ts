@@ -57,9 +57,8 @@
  *   itself is never rewritten.
  * - Median island clearance (≥ 3.0 m lane each side) is checked against the
  *   POST-intervention edges (F3). gate() cannot see width; apply degrades.
- * - Bike lane (Danish stepped track): the 1.8 m lane is inset 0.3 m from the
- *   new curb line (band spans 0.3–2.1 m from the curb); the 0.3 m step strip
- *   and the outer 0.2 m buffer remain reclaimed 'open'.
+ * - Bike lane (Danish stepped track): the 1.8 m lane is centered inside the
+ *   2.3 m freed curb band, leaving an equal 0.25 m buffer on both sides.
  * - Loading zone: placement shared with gate() (lib/transforms/parking.ts),
  *   here with the full conflict set (jog build-outs and borrowed strips
  *   included). Converting retained parking subtracts the bay from the lane
@@ -77,6 +76,13 @@ import type {
   SurfaceKind,
   XY,
 } from '@/lib/scene/types';
+import {
+  featureCollection,
+  intersect as turfIntersect,
+  polygon as turfPolygon,
+} from '@turf/turf';
+import type { Feature, MultiPolygon, Polygon } from 'geojson';
+import { polyArea, ringArea } from '@/lib/geo/frame';
 import {
   BAND_TAPER_RUN,
   BIKE_LANE_SETBACK_M,
@@ -107,8 +113,10 @@ import { gate } from './gate';
 const EPS = 1e-6;
 
 const BIKE_LANE_W = 1.8; // bike lane width, m
-const TREE_SPACING = 8; // m between new trees
-const TREE_END_MARGIN = 6; // keep new trees ≥ 6 m from block ends
+const TREE_SPACING_MIN = 5.8; // deterministic irregular spacing, m
+const TREE_SPACING_MAX = 8.6;
+const TREE_END_MARGIN = 5; // keep new trees clear of corner geometry
+const TREE_LATERAL_JITTER = 0.22; // break a mechanically straight pit row
 const ISLAND_HALF_W = 1.0; // islands are 2.0 m wide across the body (9 m tip to tip, see parking.ts ISLAND_LEN)…
 const ISLAND_CAP_LEN = 2.0; // …with tapered end caps: a refuge capsule, not a brick
 const ISLAND_MIN_LANE = 3.0; // required remaining lane on each side of an island
@@ -125,7 +133,55 @@ const JOG_SPEC: Record<'light' | 'medium' | 'heavy', { count: number; len: numbe
     heavy: { count: 4, len: 16, depth: 3.2 },
   };
 
+/** Deterministic unit hash for transform placement. Never use runtime randomness. */
+function seeded01(key: string, index: number): number {
+  let hash = 2166136261;
+  const input = `${key}:${index}`;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
+
 type ReclaimedUse = BlockScene['reclaimed'][number]['use'];
+
+function closeRing(ring: Ring): number[][] {
+  return [...ring.map(([x, y]) => [x, y]), [ring[0][0], ring[0][1]]];
+}
+
+function polyToTurf(poly: Poly): Feature<Polygon> {
+  return turfPolygon([closeRing(poly.exterior), ...poly.holes.map(closeRing)]);
+}
+
+function turfToPolys(feature: Feature<Polygon | MultiPolygon>): Poly[] {
+  const polys =
+    feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+  return polys.map((rings) => {
+    const open = (ring: number[][]): Ring =>
+      ring.slice(0, -1).map(([x, y]) => [x, y] as XY);
+    const exterior = open(rings[0]);
+    const holes = rings.slice(1).map(open);
+    return {
+      exterior: ringArea(exterior) < 0 ? exterior.reverse() : exterior,
+      holes: holes.map((hole) => (ringArea(hole) > 0 ? hole.reverse() : hole)),
+    };
+  });
+}
+
+/**
+ * A curb profile may bridge across a surveyed median notch when it rebuilds
+ * the roadbed from two long curb lines. Inward-only work must remain inside
+ * the original planimetric polygon so existing islands and gaps survive.
+ */
+function preserveSurveyedRoadbed(candidate: Poly, surveyed: Poly): Poly {
+  const candidateFeature = polyToTurf(candidate);
+  const surveyedFeature = polyToTurf(surveyed);
+  const clipped = turfIntersect(featureCollection<Polygon | MultiPolygon>([candidateFeature, surveyedFeature]));
+  if (!clipped) return candidate;
+  const parts = turfToPolys(clipped).sort((a, b) => polyArea(b) - polyArea(a));
+  return parts[0] ?? candidate;
+}
 
 /** A trapezoidal depth profile: `depth` between tapers, linear tapers of length `run`. */
 interface TrapSeg {
@@ -536,7 +592,7 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
   for (const side of ['left', 'right'] as Side[]) {
     const action = p.parking[side];
     if (action === 'keep') continue;
-    const freed = freedExtents(scene, side, action, p.streetTrees ? TREE_SPACING : null);
+    const freed = freedExtents(scene, side, action, null);
     if (freed.length === 0) continue;
     bandHull[side] = [freed[0][0], freed[freed.length - 1][1]]; // always the parking hull
     if (action === 'remove') {
@@ -551,7 +607,7 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
       });
       parkingLanes = parkingLanes.filter((l) => l.side !== side);
     } else {
-      const layout = reduceLayout(scene, side, p.streetTrees ? TREE_SPACING : null);
+      const layout = reduceLayout(scene, side, null);
       retainedClusters[side] = layout.clusters;
       for (const [f0, f1] of freed) {
         bandSegs[side].push({
@@ -734,17 +790,19 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
     }
   }
 
-  // A borrowed strip displaces retained parking under it: cars cannot park
-  // on the S. Subtract the span; the space count follows the removed length.
+  // A build-out clears parking across its full x-span on BOTH curbs. The
+  // opposite curb is part of the travel channel at the pinch, so counting a
+  // parked car there as clear carriageway produces an impassable diagram.
+  // Borrowed strips also displace parking on the curb they occupy.
   for (const side of ['left', 'right'] as Side[]) {
-    for (const bseg of borrowSegs[side]) {
+    for (const blocked of [...jogSegs.left, ...jogSegs.right, ...borrowSegs[side]]) {
       parkingLanes = parkingLanes.map((l) => {
         if (l.side !== side) return l;
-        const cut = overlapLen(l.extentsX, bseg.x0, bseg.x1);
+        const cut = overlapLen(l.extentsX, blocked.x0, blocked.x1);
         if (cut < 0.01) return l;
         return {
           ...l,
-          extentsX: subtractExtent(l.extentsX, bseg.x0, bseg.x1),
+          extentsX: subtractExtent(l.extentsX, blocked.x0, blocked.x1),
           spaces: Math.max(0, l.spaces - Math.round(cut / PARKING_BAY_LEN_M)),
         };
       });
@@ -806,25 +864,30 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
     }
   }
 
-  /* 7 — bikeLane (Danish stepped track): 1.8 m strip inset 0.3 m from the
-     old curb over the freed parking hull. The step gap reads as the level
-     change between sidewalk and track. */
+  /* 7 — bikeLane (Danish stepped track): 1.8 m strip centered inside the
+     freed curb band with equal buffers on both sides. */
   let bikeLane: BlockScene['bikeLane'] = null;
   let bikeSide: Side | null = null;
+  let bikeTrackSpan: [number, number] | null = null;
   if (p.bikeLane !== 'none' && bandHull[p.bikeLane]) {
     bikeSide = p.bikeLane;
     const [h0, h1] = bandHull[bikeSide] as [number, number];
-    bikeLane = {
-      side: bikeSide,
-      poly: bandPoly(
-        curbOf(bikeSide),
-        bikeSide,
-        h0,
-        h1,
-        BIKE_LANE_SETBACK_M,
-        BIKE_LANE_SETBACK_M + BIKE_LANE_W,
-      ),
-    };
+    const track0 = h0 + BAND_TAPER_RUN + BIKE_LANE_SETBACK_M;
+    const track1 = h1 - BAND_TAPER_RUN - BIKE_LANE_SETBACK_M;
+    if (track1 - track0 > BIKE_LANE_W) {
+      bikeTrackSpan = [track0, track1];
+      bikeLane = {
+        side: bikeSide,
+        poly: bandPoly(
+          curbOf(bikeSide),
+          bikeSide,
+          track0,
+          track1,
+          BIKE_LANE_SETBACK_M,
+          BIKE_LANE_SETBACK_M + BIKE_LANE_W,
+        ),
+      };
+    }
   }
 
   /* 8 — loadingZone: shared placement (parking.ts) with the full conflict
@@ -880,40 +943,59 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
     }
   }
 
-  /* 9 — streetTrees: 8 m spacing, centered in the band (1.15 m off the old
-     curb), within each freed band's FLAT stretch and ≥ 6 m from block ends.
-     Skips the bike-lane side, borrowed strips, and the loading bay. A
+  /* 9 — streetTrees: deterministic irregular spacing within each freed
+     band's flat stretch, with a small cross-band offset so pits do not read
+     as a stamped row. Skips cycle-track sides, borrowed strips, and loading. A
      candidate within clearance of an existing crown is skipped, no
      re-spacing (gaps under existing canopy are the point). */
   const crownClearance = (dbhIn: number | null) =>
     Math.max(5, Math.max(2.2, 0.28 * (dbhIn ?? 0)) + 2);
   const addedTrees: XY[] = [];
   if (p.streetTrees) {
+    const cycleSides = new Set<Side>();
+    if (bikeSide) cycleSides.add(bikeSide);
+    if (scene.existingBikeLane && !p.sharedSurface) cycleSides.add(scene.existingBikeLane.side);
     for (const side of ['left', 'right'] as Side[]) {
-      if (side === bikeSide) continue;
-      for (const seg of bandSegs[side]) {
+      if (cycleSides.has(side)) continue;
+      for (let segIndex = 0; segIndex < bandSegs[side].length; segIndex++) {
+        const seg = bandSegs[side][segIndex];
         const a = Math.max(seg.x0 + seg.run, xs + TREE_END_MARGIN);
         const b = Math.min(seg.x1 - seg.run, xe - TREE_END_MARGIN);
         if (b < a) continue;
-        const count = Math.floor((b - a) / TREE_SPACING) + 1;
-        const start = a + (b - a - (count - 1) * TREE_SPACING) / 2;
         const curb = curbOf(side);
-        for (let i = 0; i < count; i++) {
-          const x = start + i * TREE_SPACING;
-          if (depthAt(borrowSegs[side], x) > EPS) continue; // roadway swings here
+        const key = `${scene.segment.segmentId}:${side}:${segIndex}`;
+        let ordinal = 0;
+        let x = a + 1.2 + seeded01(key, ordinal) * 1.6;
+        const advance = () => {
+          ordinal++;
+          x +=
+            TREE_SPACING_MIN +
+            seeded01(key, ordinal) * (TREE_SPACING_MAX - TREE_SPACING_MIN);
+        };
+        while (x <= b + EPS) {
+          if (depthAt(borrowSegs[side], x) > EPS) {
+            advance();
+            continue; // roadway swings here
+          }
           if (
             carvedBay &&
             carvedBay.side === side &&
             x > carvedBay.x0 - 1 &&
             x < carvedBay.x1 + 1
           ) {
+            advance();
             continue; // the loading bay is truck space
           }
-          const pos: XY = [x, yAt(curb, x) + inward(side) * (PARKING_BAND_W / 2)];
+          const lateral = (seeded01(key, ordinal + 1000) - 0.5) * 2 * TREE_LATERAL_JITTER;
+          const pos: XY = [
+            x,
+            yAt(curb, x) + inward(side) * (PARKING_BAND_W / 2 + lateral),
+          ];
           const shaded = scene.existingTrees.some(
             (t) => Math.hypot(pos[0] - t.pos[0], pos[1] - t.pos[1]) < crownClearance(t.dbhIn),
           );
           if (!shaded) addedTrees.push(pos);
+          advance();
         }
       }
     }
@@ -934,6 +1016,9 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
       exterior: dedupeRing([...bottom, ...top.slice().reverse()]),
       holes: islandPolys.map((ip) => ip.exterior.slice().reverse()), // holes are CW
     };
+    if (borrowSegs.left.length === 0 && borrowSegs.right.length === 0) {
+      roadbedAfter = preserveSurveyedRoadbed(roadbedAfter, scene.roadbed);
+    }
   }
 
   /* 11 — gateway raised tables: a 3 m full-width strip at each gated end,
@@ -988,7 +1073,7 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
     const negProf =
       borrowSegs[side].length > 0 ? profileFromSegs(borrowSegs[side], curb, xs, xe) : null;
     for (const seg of bandSegs[side]) {
-      if (side === bikeSide) {
+      if (side === bikeSide && bikeTrackSpan) {
         const [h0, h1] = bandHull[side] as [number, number];
         // Gateway-extension pieces beyond the parking hull stay full-depth…
         if (seg.x0 < h0 - EPS) {
@@ -998,15 +1083,22 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
         // (2.1–2.3) flank the inset track.
         const f0 = Math.max(seg.x0 + seg.run, h0);
         const f1 = Math.min(seg.x1 - seg.run, h1);
+        const [track0, track1] = bikeTrackSpan;
+        if (track0 - f0 > EPS) {
+          reclaimed.push({ poly: bandPoly(curb, side, f0, track0, 0, PARKING_BAND_W), use: 'open' });
+        }
         if (f1 - f0 > EPS) {
           reclaimed.push({
-            poly: bandPoly(curb, side, f0, f1, 0, BIKE_LANE_SETBACK_M),
+            poly: bandPoly(curb, side, track0, track1, 0, BIKE_LANE_SETBACK_M),
             use: 'open',
           });
           reclaimed.push({
-            poly: bandPoly(curb, side, f0, f1, BIKE_LANE_SETBACK_M + BIKE_LANE_W, PARKING_BAND_W),
+            poly: bandPoly(curb, side, track0, track1, BIKE_LANE_SETBACK_M + BIKE_LANE_W, PARKING_BAND_W),
             use: 'open',
           });
+        }
+        if (f1 - track1 > EPS) {
+          reclaimed.push({ poly: bandPoly(curb, side, track1, f1, 0, PARKING_BAND_W), use: 'open' });
         }
         if (seg.x1 > h1 + EPS) {
           reclaimed.push({ poly: ribbonPoly(curb, side, h1, seg.x1, [], seg), use: 'open' });
@@ -1044,7 +1136,7 @@ export function applyPlan(scene: BlockScene, plan: InterventionPlan): BlockScene
   for (const { side, seg } of jogEntries) {
     reclaimed.push({
       poly: ribbonPoly(curbOf(side), side, seg.x0, seg.x1, bandSegs[side], seg),
-      use: 'planting',
+      use: p.sharedSurface ? 'seating' : 'chicane',
     });
   }
   reclaimed.push(...islandPolys.map((poly) => ({ poly, use: 'island' as const })));

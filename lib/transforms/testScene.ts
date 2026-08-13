@@ -291,19 +291,19 @@ export function wideScene(): BlockScene {
 }
 
 /**
- * A Douglass-St-style block already dense with street trees: 16 trees over
- * 120 m (13.3 per 100 m — above the rule-7 threshold of 12).
+ * An exceptionally canopied block: 30 trees over 120 m, or 25 per 100 m.
+ * Ordinary leafy blocks stay below the relaxed rule-7 threshold of 24.
  */
 export function denseCanopyScene(): BlockScene {
   const s = makeScene();
   const y = 6.75; // mid-sidewalk
   const species = ['london planetree', 'pin oak', 'honeylocust'];
   s.existingTrees = [];
-  for (let i = 0; i < 8; i++) {
-    const x = 8 + i * 14;
+  for (let i = 0; i < 15; i++) {
+    const x = 3 + i * 8;
     s.existingTrees.push(
       { pos: [x, y], dbhIn: 14 + i, species: species[i % 3], source: 'forestry' },
-      { pos: [x + 8, -y], dbhIn: 12 + i, species: species[(i + 1) % 3], source: 'forestry' },
+      { pos: [x + 4, -y], dbhIn: 12 + i, species: species[(i + 1) % 3], source: 'forestry' },
     );
   }
   return s;

@@ -54,8 +54,8 @@ export const REDUCE_MIN_CLUSTER_BAYS = 2;
  */
 export const SIDEWALK_CLEAR_MIN_M = 1.8;
 
-/** Danish stepped-track setback: bike lane inset from the new curb line, m. model.md §15 row 9. */
-export const BIKE_LANE_SETBACK_M = 0.3;
+/** Equal buffer around a 1.8 m track inside the 2.3 m freed curb band, m. model.md §15 row 9. */
+export const BIKE_LANE_SETBACK_M = 0.25;
 
 /** Loading bay length, m: about two truck lengths. model.md §15 row 10. */
 export const LOADING_ZONE_LEN_M = 12;

@@ -54,7 +54,20 @@ async function main() {
 
       const norm = (s: string, p: string) => s.split(p).join('X');
       const diffs = diffPlates(norm(today, `${slug}-t`), norm(afterSvg, `${slug}-a`));
-      const allowed = new Set(['roadbed', 'reclaimed', 'bike', 'islands', 'curb', 'markings', 'trees', 'people']);
+      const allowed = new Set([
+        'roadbed',
+        'reclaimed',
+        'shared',
+        'parking',
+        'bike',
+        'loading',
+        'loading-label',
+        'islands',
+        'curb',
+        'road-markings',
+        'markings',
+        'trees',
+      ]);
       const illegal = diffs.filter((d) => !allowed.has(d));
 
       const seg = scene.segment;

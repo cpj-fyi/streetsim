@@ -486,7 +486,7 @@ not, never tuned to flatter the woonerf.
 | 6 | `REDUCE_KEEP_FRACTION` | 0.5 | none | **[engineering estimate]** per product spec: 'reduce' retains roughly half the side's spaces, floor()ed. |
 | 7 | `REDUCE_MIN_CLUSTER_BAYS` | 2 | none | **[engineering choice]**: a one-bay cluster is not a workable bay group, and 2 bays (11 m) keeps every cluster wider than apply's 6 m profile-closing pass, so a retained cluster can never be swallowed by the new curb line. |
 | 8 | `SIDEWALK_CLEAR_MIN_M` | 1.8 m | PROWAG (US Access Board final rule, 2023) R302.3: pedestrian access route continuous clear width 4.0 ft (1.2 m) minimum, exclusive of curb; R302.4: passing spaces 5.0 ft (1.5 m) at max 200 ft intervals | We hold 6 ft (1.8 m) of residual clear sidewalk at EVERY point of a borrowed stretch, so the access route and passing width survive continuously, not just at intervals. Chicane sidewalk-borrow floor. |
-| 9 | `BIKE_LANE_SETBACK_M` | 0.3 m | Danish stepped-track practice (Copenhagen kerb-separated cycle track): the track sits a curb step below the footway | **[engineering estimate]** for the drawn width of the step: the 0.3 m gap between the new curb line and the 1.8 m track renders the level change. |
+| 9 | `BIKE_LANE_SETBACK_M` | 0.25 m | Danish stepped-track practice (Copenhagen kerb-separated cycle track): the track sits a curb step below the footway | **[engineering estimate]** for the drawn buffer: centering a 1.8 m track inside the 2.3 m freed curb band leaves equal 0.25 m clear strips along both edges. |
 | 10 | `LOADING_ZONE_LEN_M` | 12 m | none | **[engineering estimate]** per product spec: about two truck lengths of curb. |
 | 11 | `GATEWAY_BO_LEN_M` / `GATEWAY_BO_PLATEAU_M` / `GATEWAY_BO_DEPTH_M` | 4 m / 1.5 m / 2.5 m | NACTO Urban Street Design Guide, Curb Extensions/Gateway (qualitative: pinch the entry, tighten turning radii) | **[engineering choice]** for the exact dims: each gateway is two opposing build-outs, full depth at the corner, tapering to the curb over 4 m, depth capped at 2.5 m and clamped so the entry gap never drops below max(4.0 m, the operating travel floor). |
 | 12 | `GATEWAY_TABLE_LEN_M` | 3 m | FHWA ePrimer speed tables are 22 ft; ours is deliberately narrower | **[engineering choice]**: a 3 m raised strip between the build-outs marks the threshold without becoming a mid-block table. |
@@ -511,3 +511,18 @@ Notes for other layers (contract, not tuning):
    (truck space, not public space) and lives only in `scene.loadingZone`.
    A bay converted from retained parking subtracts from the lane's
    `extentsX`, so section 10's space counts fall out of the extents.
+5. A shared plaza applies only with entry gateways and a chicane. NACTO's
+   Commercial Shared Street guidance calls for a clear entry, a nonlinear
+   vehicle path, and furniture or bollards that define the traveled way.
+   Global Designing Cities likewise treats furniture and planters as
+   horizontal deflectors. The transform therefore keeps a slow, bent access
+   path and places seating islands and boulders in the former straight-through
+   line. This preserves delivery and emergency access without depicting an
+   undifferentiated driving surface.
+
+Shared-plaza geometry sources:
+
+- NACTO, *Commercial Shared Street*:
+  https://nacto.org/publication/urban-street-design-guide/streets/commercial-shared-street/
+- Global Designing Cities Initiative, *Residential Shared Streets, Example 1*:
+  https://globaldesigningcities.org/publication/global-street-design-guide/streets/shared-streets/residential-shared-streets/example-1-9-m/

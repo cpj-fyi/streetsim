@@ -54,7 +54,20 @@ async function main() {
         norm(today, `${entry.name}-t`),
         norm(afterSvg, `${entry.name}-a`),
       );
-      const allowed = new Set(['roadbed', 'reclaimed', 'bike', 'loading', 'islands', 'curb', 'markings', 'trees', 'people']);
+      const allowed = new Set([
+        'roadbed',
+        'reclaimed',
+        'shared',
+        'parking',
+        'bike',
+        'loading',
+        'loading-label',
+        'islands',
+        'curb',
+        'road-markings',
+        'markings',
+        'trees',
+      ]);
       const illegal = diffs.filter((d) => !allowed.has(d));
       console.log(
         `${entry.name}: layers differing today→after: [${diffs.join(', ')}]` +
