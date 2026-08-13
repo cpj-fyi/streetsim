@@ -157,3 +157,81 @@ button,
 [role="region"][tabindex] {
   touch-action: manipulation;
 }
+
+/* Map-only iframe comparison. The invisible native range owns all pointer,
+   touch, and keyboard input; the visible divider mirrors its value. */
+.embed-comparison-range {
+  appearance: none;
+  background: transparent;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.embed-comparison-range::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.embed-comparison-range::-webkit-slider-thumb {
+  width: 44px;
+  height: 100%;
+  appearance: none;
+  border: 0;
+  background: transparent;
+}
+
+.embed-comparison-range::-moz-range-track {
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.embed-comparison-range::-moz-range-thumb {
+  width: 44px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.embed-comparison-range:focus-visible {
+  outline: none;
+}
+
+.embed-comparison-divider {
+  pointer-events: none;
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: var(--reveal);
+  z-index: 10;
+  width: 1px;
+  background: var(--rule);
+}
+
+.embed-comparison-handle {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  translate: -50% -50%;
+  place-items: center;
+  border: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.embed-comparison-range:focus-visible ~ .embed-comparison-divider .embed-comparison-handle {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .embed-comparison-range:focus-visible ~ .embed-comparison-divider .embed-comparison-handle {
+    outline-color: Highlight;
+  }
+}
