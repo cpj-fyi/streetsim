@@ -13,6 +13,7 @@ import { renderScene } from "@/lib/render/render";
 import { planFromParams } from "@/lib/plan";
 import { AddressSearch } from "@/components/AddressSearch";
 import { BlockStage } from "@/components/BlockStage";
+import { EmbedComparison } from "@/components/EmbedComparison";
 import { PlanControls } from "@/components/PlanControls";
 import { Vitals } from "@/components/Vitals";
 
@@ -63,6 +64,8 @@ export default async function BlockPage({
 }) {
   const { name } = await params;
   const sp = await searchParams;
+  const s = (key: string) => (Array.isArray(sp[key]) ? sp[key]![0] : sp[key]);
+  const embed = s("embed") === "1";
 
   const scene = await getScene(name);
   if (!scene) notFound();
@@ -78,7 +81,7 @@ export default async function BlockPage({
   if (eligibility.eligible) {
     try {
       after = applyPlan(scene, requested);
-      metrics = computeMetrics(scene, after);
+      if (!embed) metrics = computeMetrics(scene, after);
     } catch (e) {
       geometryError =
         "The surveyed geometry of this block has a shape the redesign engine cannot process. Showing the street as it is. (" +
@@ -99,10 +102,20 @@ export default async function BlockPage({
   const afterSvg = renderScene(after, { idPrefix: "a", bounds: stageBounds });
 
   const seg = scene.segment;
-  const s = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : sp[k]);
   const street = titleCase(seg.street);
   const fromTo = `${titleCase(seg.fromStreet)} to ${titleCase(seg.toStreet)}`;
   const currentLocation = `${street}, ${fromTo}, ${seg.borough}`;
+
+  if (embed) {
+    return (
+      <EmbedComparison
+        todaySvg={todaySvg}
+        afterSvg={afterSvg}
+        hasPlan={hasPlan}
+        identity={{ street, fromTo: `${fromTo}, ${seg.borough}` }}
+      />
+    );
+  }
 
   return (
     <BlockStage
