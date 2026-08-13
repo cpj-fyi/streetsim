@@ -76,7 +76,7 @@ export function AddressSearch({
         if ((error as Error).name === "AbortError") return;
         setHits([]);
         setStatus("geocoder-down");
-        setAnnouncement("Unable to search NYC addresses. The sample blocks still work.");
+        setAnnouncement("Unable to search NYC addresses. Check your connection and try again.");
       }
     }, query.length < 3 ? 0 : 250);
     return () => {
@@ -96,7 +96,7 @@ export function AddressSearch({
     } catch {
       setBusy(null);
       setStatus("block-down");
-      setAnnouncement("Unable to load city data for this block. Try again or use a sample block.");
+      setAnnouncement("Unable to load city data for this block. Try again.");
     }
   }
 
@@ -121,9 +121,9 @@ export function AddressSearch({
 
   const error =
     status === "geocoder-down"
-      ? "Unable to search NYC addresses. The sample blocks still work."
+      ? "Unable to search NYC addresses. Check your connection and try again."
       : status === "block-down"
-        ? "Unable to load city data for this block. Try again or use a sample block."
+        ? "Unable to load city data for this block. Try again."
         : null;
 
   return (
